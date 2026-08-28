@@ -12,6 +12,7 @@ Set up the portfolio workflow: made a repository from a template, cloned it with
 GitHub Desktop, edited files in RStudio, rendered with Quarto, and published to
 GitHub Pages.
 
+
 ## Key Concepts
 
 Three places a file can live:
@@ -21,6 +22,31 @@ Three places a file can live:
 3. **My live site** — what the world sees
 
 The loop: **Edit → Save → Render → Commit → Push → wait → refresh**
+
+A website is comprised of a folder with .html files (Quarto) + computer that is
+always on (GitHub). 
+
+1. **Index** - First file accessed after folder request
+2. **GIT** - Version tracker (invisible)
+3. **Github.com** - Website that shares copy of folder
+4. **Github Desktop** - Buttons that tell Git what to do
+5. **Commit** - Save a labeled change
+6. **Push** - Send change to website
+
+### How does Quarto work?
+.qmd --> Quarto --> .html
+
+### Anatomy of .qmd
+- YAML for the header (title & date)
+- Markdown for text body
+- R for code chunks
+
+## Files & Folders
+- For me
+  - index.qmd, about.qmd, weeklynotes/, assignments/
+- For machine
+  - quarto.yml (settings for website), freeze/ (quarto)
+  - .Rproj (RStudio), .gitignore (Git), .Renviron (R), docs/ (internet)
 
 ## Proving R Works
 
@@ -35,11 +61,12 @@ sessionInfo()$R.version$version.string
 
 <!-- CHANGE THIS: 3-4 sentences -->
 
-What I want out of this course: Develop higher GitHub proficiency
+What I want out of this course: Develop higher GitHub proficiency, spatial
+analysis thinking
 
 One thing I'm nervous about: The Shark Tank project
 
 ## Questions I Still Have
 
--
+- Is rendering after changing files in RStudio necessary after saving them?
 -

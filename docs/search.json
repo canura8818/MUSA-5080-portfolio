@@ -46,7 +46,7 @@
     "href": "weekly-notes/week-01.html#key-concepts",
     "title": "Week 1: Getting Set Up",
     "section": "Key Concepts",
-    "text": "Key Concepts\nThree places a file can live:\n\nMy computer — where I edit\nGitHub.com — where it’s stored\nMy live site — what the world sees\n\nThe loop: Edit → Save → Render → Commit → Push → wait → refresh"
+    "text": "Key Concepts\nThree places a file can live:\n\nMy computer — where I edit\nGitHub.com — where it’s stored\nMy live site — what the world sees\n\nThe loop: Edit → Save → Render → Commit → Push → wait → refresh\nA website is comprised of a folder with .html files (Quarto) + computer that is always on (GitHub).\n\nIndex - First file accessed after folder request\nGIT - Version tracker (invisible)\nGithub.com - Website that shares copy of folder\nGithub Desktop - Buttons that tell Git what to do\nCommit - Save a labeled change\nPush - Send change to website\n\n\nHow does Quarto work?\n.qmd –&gt; Quarto –&gt; .html\n\n\nAnatomy of .qmd\n\nYAML for the header (title & date)\nMarkdown for text body\nR for code chunks"
   },
   {
     "objectID": "weekly-notes/week-01.html#proving-r-works",
@@ -60,14 +60,14 @@
     "href": "weekly-notes/week-01.html#reflection",
     "title": "Week 1: Getting Set Up",
     "section": "Reflection",
-    "text": "Reflection\n\nWhat I want out of this course: Develop higher GitHub proficiency\nOne thing I’m nervous about: The Shark Tank project"
+    "text": "Reflection\n\nWhat I want out of this course: Develop higher GitHub proficiency, spatial analysis thinking\nOne thing I’m nervous about: The Shark Tank project"
   },
   {
     "objectID": "weekly-notes/week-01.html#questions-i-still-have",
     "href": "weekly-notes/week-01.html#questions-i-still-have",
     "title": "Week 1: Getting Set Up",
     "section": "Questions I Still Have",
-    "text": "Questions I Still Have"
+    "text": "Questions I Still Have\n\nIs rendering after changing files in RStudio necessary after saving them?"
   },
   {
     "objectID": "about.html",
@@ -117,5 +117,33 @@
     "title": "",
     "section": "",
     "text": "Code\n\n\n\n\nData files for MUSA 5080\nDownload assignment data from Canvas and save it here. Do not rename the files! Have a nice day :)"
+  },
+  {
+    "objectID": "weekly-notes/week-02.html#key-concepts",
+    "href": "weekly-notes/week-02.html#key-concepts",
+    "title": "Week 2: Census Data",
+    "section": "Key Concepts",
+    "text": "Key Concepts"
+  },
+  {
+    "objectID": "weekly-notes/week-02.html#reflection",
+    "href": "weekly-notes/week-02.html#reflection",
+    "title": "Week 2: Census Data",
+    "section": "Reflection",
+    "text": "Reflection"
+  },
+  {
+    "objectID": "weekly-notes/week-02.html#questions",
+    "href": "weekly-notes/week-02.html#questions",
+    "title": "Week 2: Census Data",
+    "section": "Questions",
+    "text": "Questions"
+  },
+  {
+    "objectID": "weekly-notes/week-01.html#files-folders",
+    "href": "weekly-notes/week-01.html#files-folders",
+    "title": "Week 1: Getting Set Up",
+    "section": "Files & Folders",
+    "text": "Files & Folders\n\nFor me\n\nindex.qmd, about.qmd, weeklynotes/, assignments/\n\nFor machine\n\nquarto.yml (settings for website), freeze/ (quarto)\n.Rproj (RStudio), .gitignore (Git), .Renviron (R), docs/ (internet)"
   }
 ]
