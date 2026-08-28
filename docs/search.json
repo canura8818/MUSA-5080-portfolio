@@ -4,14 +4,14 @@
     "href": "index.html",
     "title": "Home",
     "section": "",
-    "text": "Welcome to my portfolio for MUSA 5080: Public Policy Analytics at the University of Pennsylvania.\nThis site documents my work in the Master of Urban Spatial Analytics program — weekly notes, course assignments, and a final project applying data analysis to urban policy questions.\n\n\n\nI’m a student in the MUSA program at Penn. My background is in Environmental Science and Data Science, and I’m interested in using geospatial environmental data to create visualizations that help promote preservation of natural spaces.\n\n\n\n\nWeekly Notes — what I’m learning each week\nAssignments — analyses completed for the course\nAbout — more background and how to reach me\n\n\n\n\n\n\nEmail: canura@upenn.edu\nGitHub: canura8818"
+    "text": "Welcome to my portfolio for MUSA 5080: Public Policy Analytics at the University of Pennsylvania.\nThis site documents my work in the Master of Urban Spatial Analytics program — weekly notes, course assignments, and a final project applying data analysis to urban policy questions.\n\n\n\nI’m a student in the MUSA program at Penn. My background is in Environmental Science and Data Science, and I’m interested in using geospatial environmental data to create visualizations that help promote preservation of natural spaces. I enjoy boardgames, golfing, playing volleyball, and cooking.\n\n\n\n\nWeekly Notes — what I’m learning each week\nAssignments — analyses completed for the course\nAbout — more background and how to reach me\n\n\n\n\n\n\nEmail: canura@upenn.edu\nGitHub: canura8818"
   },
   {
     "objectID": "index.html#about-me",
     "href": "index.html#about-me",
     "title": "Home",
     "section": "",
-    "text": "I’m a student in the MUSA program at Penn. My background is in Environmental Science and Data Science, and I’m interested in using geospatial environmental data to create visualizations that help promote preservation of natural spaces."
+    "text": "I’m a student in the MUSA program at Penn. My background is in Environmental Science and Data Science, and I’m interested in using geospatial environmental data to create visualizations that help promote preservation of natural spaces. I enjoy boardgames, golfing, playing volleyball, and cooking."
   },
   {
     "objectID": "index.html#what-youll-find-here",
@@ -53,14 +53,14 @@
     "href": "weekly-notes/week-01.html#proving-r-works",
     "title": "Week 1: Getting Set Up",
     "section": "Proving R Works",
-    "text": "Proving R Works\nThe chunk below runs when this page renders. If you can see a result underneath it on your published site, R and Quarto are talking to each other correctly.\n\nsessionInfo()$R.version$version.string\n\n[1] \"R version 4.6.0 (2026-04-24)\""
+    "text": "Proving R Works\nThe chunk below runs when this page renders. If you can see a result underneath it on your published site, R and Quarto are talking to each other correctly.\n\nsessionInfo()$R.version$version.string\n\n[1] \"R version 4.5.3 (2026-03-11 ucrt)\""
   },
   {
     "objectID": "weekly-notes/week-01.html#reflection",
     "href": "weekly-notes/week-01.html#reflection",
     "title": "Week 1: Getting Set Up",
     "section": "Reflection",
-    "text": "Reflection\n\nWhat I want out of this course:\nOne thing I’m nervous about:"
+    "text": "Reflection\n\nWhat I want out of this course: Develop higher GitHub proficiency\nOne thing I’m nervous about: The Shark Tank project"
   },
   {
     "objectID": "weekly-notes/week-01.html#questions-i-still-have",
@@ -74,28 +74,28 @@
     "href": "about.html",
     "title": "About",
     "section": "",
-    "text": "Write a few paragraphs about yourself here: where you came from before MUSA, what drew you to urban spatial analytics, and what you’re hoping to do with it."
+    "text": "I went Colby College for my undergraduate degree, double majoring in Data and Environmental Science. During that time I spent a semester at the Bigelow Laboratory for Ocean Sciences. My interest in urban spatial analytics stems from the summer research I conducted with the 7 Lakes Alliance. I performed a geochemical and spatial analysis of the sediment in North Pond, identifying the main source of iron influx which was causing algal blooms. I created a heat map to communicate this and presented to the local community. Without many geospatial classes (all but 2) at Colby, I wanted more experience with geospatial analysis, which has led me here to UPenn. I hope to help solve environmental problems and contribute to urban planning projects in Bangkok, my home town, to build a more sustainable and accesible city."
   },
   {
     "objectID": "about.html#background",
     "href": "about.html#background",
     "title": "About",
     "section": "",
-    "text": "Write a few paragraphs about yourself here: where you came from before MUSA, what drew you to urban spatial analytics, and what you’re hoping to do with it."
+    "text": "I went Colby College for my undergraduate degree, double majoring in Data and Environmental Science. During that time I spent a semester at the Bigelow Laboratory for Ocean Sciences. My interest in urban spatial analytics stems from the summer research I conducted with the 7 Lakes Alliance. I performed a geochemical and spatial analysis of the sediment in North Pond, identifying the main source of iron influx which was causing algal blooms. I created a heat map to communicate this and presented to the local community. Without many geospatial classes (all but 2) at Colby, I wanted more experience with geospatial analysis, which has led me here to UPenn. I hope to help solve environmental problems and contribute to urban planning projects in Bangkok, my home town, to build a more sustainable and accesible city."
   },
   {
     "objectID": "about.html#skills",
     "href": "about.html#skills",
     "title": "About",
     "section": "Skills",
-    "text": "Skills\n\n\nLanguages & Tools: R, Quarto, Git\nSpatial: (add as you learn)\nData: US Census / ACS via tidycensus"
+    "text": "Skills\n\n\nLanguages & Tools: R, Java, JavaScript, MATLAB, Python, Quarto, Git, GEE\nSpatial: (add as you learn)\nData: US Census / ACS via tidycensus"
   },
   {
     "objectID": "about.html#contact",
     "href": "about.html#contact",
     "title": "About",
     "section": "Contact",
-    "text": "Contact\n\n\nEmail: your-email@upenn.edu\nGitHub: @your-username"
+    "text": "Contact\n\n\nEmail: canura@upenn.edu\nGitHub: @canura8818"
   },
   {
     "objectID": "assignments/index.html",
