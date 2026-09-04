@@ -2,7 +2,7 @@
 title: "About"
 ---
 
-![Photo of me](/C:/Users/chano/Downloads/Images/1000011714.jpg)
+![Photo of me](images/me.jpg)
 
 ## Background
 
