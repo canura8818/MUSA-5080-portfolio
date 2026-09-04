@@ -2,6 +2,8 @@
 title: "About"
 ---
 
+![Photo of me](/C:/Users/chano/Downloads/Images/1000011714.jpg)
+
 ## Background
 
 <!-- CHANGE THIS -->
