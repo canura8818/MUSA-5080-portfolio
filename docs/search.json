@@ -1,5 +1,89 @@
 [
   {
+    "objectID": "weekly-notes/week-02.html",
+    "href": "weekly-notes/week-02.html",
+    "title": "Week 2: Census Data",
+    "section": "",
+    "text": "Quiz"
+  },
+  {
+    "objectID": "weekly-notes/week-02.html#what-we-did",
+    "href": "weekly-notes/week-02.html#what-we-did",
+    "title": "Week 2: Census Data",
+    "section": "",
+    "text": "Quiz"
+  },
+  {
+    "objectID": "weekly-notes/week-02.html#key-concepts",
+    "href": "weekly-notes/week-02.html#key-concepts",
+    "title": "Week 2: Census Data",
+    "section": "Key Concepts",
+    "text": "Key Concepts"
+  },
+  {
+    "objectID": "weekly-notes/week-02.html#reflection",
+    "href": "weekly-notes/week-02.html#reflection",
+    "title": "Week 2: Census Data",
+    "section": "Reflection",
+    "text": "Reflection"
+  },
+  {
+    "objectID": "weekly-notes/week-02.html#questions",
+    "href": "weekly-notes/week-02.html#questions",
+    "title": "Week 2: Census Data",
+    "section": "Questions",
+    "text": "Questions"
+  },
+  {
+    "objectID": "weekly-notes/index.html",
+    "href": "weekly-notes/index.html",
+    "title": "Weekly Notes",
+    "section": "",
+    "text": "Notes from each week of MUSA 5080. New entries appear here automatically — add a .qmd file to this folder and render.\n\n\n\n\n\n\n\n\n\n\n\nWeek 2: Census Data\n\n\ntable functions and acs data\n\n\n\n\n\nSep 4, 2026\n\n\n\n\n\n\n\nWeek 1: Getting Set Up\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nAug 28, 2026\n\n\n\n\n\nNo matching items"
+  },
+  {
+    "objectID": "data/readme.html",
+    "href": "data/readme.html",
+    "title": "",
+    "section": "",
+    "text": "Code\n\n\n\n\nData files for MUSA 5080\nDownload assignment data from Canvas and save it here. Do not rename the files! Have a nice day :)"
+  },
+  {
+    "objectID": "about.html",
+    "href": "about.html",
+    "title": "About",
+    "section": "",
+    "text": "I went Colby College for my undergraduate degree, double majoring in Data and Environmental Science. During that time I spent a semester at the Bigelow Laboratory for Ocean Sciences. My interest in urban spatial analytics stems from the summer research I conducted with the 7 Lakes Alliance. I performed a geochemical and spatial analysis of the sediment in North Pond, identifying the main source of iron influx which was causing algal blooms. I created a heat map to communicate this and presented to the local community. Without many geospatial classes (all but 2) at Colby, I wanted more experience with geospatial analysis, which has led me here to UPenn. I hope to help solve environmental problems and contribute to urban planning projects in Bangkok, my home town, to build a more sustainable and accesible city."
+  },
+  {
+    "objectID": "about.html#background",
+    "href": "about.html#background",
+    "title": "About",
+    "section": "",
+    "text": "I went Colby College for my undergraduate degree, double majoring in Data and Environmental Science. During that time I spent a semester at the Bigelow Laboratory for Ocean Sciences. My interest in urban spatial analytics stems from the summer research I conducted with the 7 Lakes Alliance. I performed a geochemical and spatial analysis of the sediment in North Pond, identifying the main source of iron influx which was causing algal blooms. I created a heat map to communicate this and presented to the local community. Without many geospatial classes (all but 2) at Colby, I wanted more experience with geospatial analysis, which has led me here to UPenn. I hope to help solve environmental problems and contribute to urban planning projects in Bangkok, my home town, to build a more sustainable and accesible city."
+  },
+  {
+    "objectID": "about.html#skills",
+    "href": "about.html#skills",
+    "title": "About",
+    "section": "Skills",
+    "text": "Skills\n\n\nLanguages & Tools: R, Java, JavaScript, MATLAB, Python, Quarto, Git, GEE\nSpatial: (add as you learn)\nData: US Census / ACS via tidycensus"
+  },
+  {
+    "objectID": "about.html#contact",
+    "href": "about.html#contact",
+    "title": "About",
+    "section": "Contact",
+    "text": "Contact\n\n\nEmail: canura@upenn.edu\nGitHub: @canura8818"
+  },
+  {
+    "objectID": "assignments/index.html",
+    "href": "assignments/index.html",
+    "title": "Assignments",
+    "section": "",
+    "text": "Completed assignments for MUSA 5080. New assignments appear here automatically once you add the .qmd file to this folder and render.\n\n\n\n\n\n\n\n\n\n\nNo matching items"
+  },
+  {
     "objectID": "index.html",
     "href": "index.html",
     "title": "Home",
@@ -49,6 +133,13 @@
     "text": "Key Concepts\nThree places a file can live:\n\nMy computer — where I edit\nGitHub.com — where it’s stored\nMy live site — what the world sees\n\nThe loop: Edit → Save → Render → Commit → Push → wait → refresh\nA website is comprised of a folder with .html files (Quarto) + computer that is always on (GitHub).\n\nIndex - First file accessed after folder request\nGIT - Version tracker (invisible)\nGithub.com - Website that shares copy of folder\nGithub Desktop - Buttons that tell Git what to do\nCommit - Save a labeled change\nPush - Send change to website\n\n\nHow does Quarto work?\n.qmd –&gt; Quarto –&gt; .html\n\n\nAnatomy of .qmd\n\nYAML for the header (title & date)\nMarkdown for text body\nR for code chunks"
   },
   {
+    "objectID": "weekly-notes/week-01.html#files-folders",
+    "href": "weekly-notes/week-01.html#files-folders",
+    "title": "Week 1: Getting Set Up",
+    "section": "Files & Folders",
+    "text": "Files & Folders\n\nFor me\n\nindex.qmd, about.qmd, weeklynotes/, assignments/\n\nFor machine\n\nquarto.yml (settings for website), freeze/ (quarto)\n.Rproj (RStudio), .gitignore (Git), .Renviron (R), docs/ (internet)"
+  },
+  {
     "objectID": "weekly-notes/week-01.html#proving-r-works",
     "href": "weekly-notes/week-01.html#proving-r-works",
     "title": "Week 1: Getting Set Up",
@@ -68,82 +159,5 @@
     "title": "Week 1: Getting Set Up",
     "section": "Questions I Still Have",
     "text": "Questions I Still Have\n\nIs rendering after changing files in RStudio necessary after saving them?"
-  },
-  {
-    "objectID": "about.html",
-    "href": "about.html",
-    "title": "About",
-    "section": "",
-    "text": "I went Colby College for my undergraduate degree, double majoring in Data and Environmental Science. During that time I spent a semester at the Bigelow Laboratory for Ocean Sciences. My interest in urban spatial analytics stems from the summer research I conducted with the 7 Lakes Alliance. I performed a geochemical and spatial analysis of the sediment in North Pond, identifying the main source of iron influx which was causing algal blooms. I created a heat map to communicate this and presented to the local community. Without many geospatial classes (all but 2) at Colby, I wanted more experience with geospatial analysis, which has led me here to UPenn. I hope to help solve environmental problems and contribute to urban planning projects in Bangkok, my home town, to build a more sustainable and accesible city."
-  },
-  {
-    "objectID": "about.html#background",
-    "href": "about.html#background",
-    "title": "About",
-    "section": "",
-    "text": "I went Colby College for my undergraduate degree, double majoring in Data and Environmental Science. During that time I spent a semester at the Bigelow Laboratory for Ocean Sciences. My interest in urban spatial analytics stems from the summer research I conducted with the 7 Lakes Alliance. I performed a geochemical and spatial analysis of the sediment in North Pond, identifying the main source of iron influx which was causing algal blooms. I created a heat map to communicate this and presented to the local community. Without many geospatial classes (all but 2) at Colby, I wanted more experience with geospatial analysis, which has led me here to UPenn. I hope to help solve environmental problems and contribute to urban planning projects in Bangkok, my home town, to build a more sustainable and accesible city."
-  },
-  {
-    "objectID": "about.html#skills",
-    "href": "about.html#skills",
-    "title": "About",
-    "section": "Skills",
-    "text": "Skills\n\n\nLanguages & Tools: R, Java, JavaScript, MATLAB, Python, Quarto, Git, GEE\nSpatial: (add as you learn)\nData: US Census / ACS via tidycensus"
-  },
-  {
-    "objectID": "about.html#contact",
-    "href": "about.html#contact",
-    "title": "About",
-    "section": "Contact",
-    "text": "Contact\n\n\nEmail: canura@upenn.edu\nGitHub: @canura8818"
-  },
-  {
-    "objectID": "assignments/index.html",
-    "href": "assignments/index.html",
-    "title": "Assignments",
-    "section": "",
-    "text": "Completed assignments for MUSA 5080. New assignments appear here automatically once you add the .qmd file to this folder and render.\n\n\n\n\n\n\n\n\n\n\nNo matching items"
-  },
-  {
-    "objectID": "weekly-notes/index.html",
-    "href": "weekly-notes/index.html",
-    "title": "Weekly Notes",
-    "section": "",
-    "text": "Notes from each week of MUSA 5080. New entries appear here automatically — add a .qmd file to this folder and render.\n\n\n\n\n\n\n\n\n\n\n\nWeek 2: Census Data\n\n\nOne line about this page.\n\n\n\n\n\nSep 5, 2026\n\n\n\n\n\n\n\nWeek 1: Getting Set Up\n\n\nFirst impressions, and getting the workflow running.\n\n\n\n\n\nAug 28, 2026\n\n\n\n\n\nNo matching items"
-  },
-  {
-    "objectID": "data/readme.html",
-    "href": "data/readme.html",
-    "title": "",
-    "section": "",
-    "text": "Code\n\n\n\n\nData files for MUSA 5080\nDownload assignment data from Canvas and save it here. Do not rename the files! Have a nice day :)"
-  },
-  {
-    "objectID": "weekly-notes/week-02.html#key-concepts",
-    "href": "weekly-notes/week-02.html#key-concepts",
-    "title": "Week 2: Census Data",
-    "section": "Key Concepts",
-    "text": "Key Concepts"
-  },
-  {
-    "objectID": "weekly-notes/week-02.html#reflection",
-    "href": "weekly-notes/week-02.html#reflection",
-    "title": "Week 2: Census Data",
-    "section": "Reflection",
-    "text": "Reflection"
-  },
-  {
-    "objectID": "weekly-notes/week-02.html#questions",
-    "href": "weekly-notes/week-02.html#questions",
-    "title": "Week 2: Census Data",
-    "section": "Questions",
-    "text": "Questions"
-  },
-  {
-    "objectID": "weekly-notes/week-01.html#files-folders",
-    "href": "weekly-notes/week-01.html#files-folders",
-    "title": "Week 1: Getting Set Up",
-    "section": "Files & Folders",
-    "text": "Files & Folders\n\nFor me\n\nindex.qmd, about.qmd, weeklynotes/, assignments/\n\nFor machine\n\nquarto.yml (settings for website), freeze/ (quarto)\n.Rproj (RStudio), .gitignore (Git), .Renviron (R), docs/ (internet)"
   }
 ]

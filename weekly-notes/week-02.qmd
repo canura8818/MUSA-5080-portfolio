@@ -1,10 +1,13 @@
 ---
 title: "Week 2: Census Data"
-description: "One line about this page."
-date: 2026-09-05
+description: "table functions and acs data"
+date: 2026-09-04
 ---
 
 ## What We Did
+
+- Quiz
+- 
 
 ## Key Concepts
 
