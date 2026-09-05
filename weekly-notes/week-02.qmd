@@ -7,9 +7,27 @@ date: 2026-09-04
 ## What We Did
 
 - Quiz
-- 
+- dplyr package
+- dplyr practice
 
 ## Key Concepts
+
+### R
+- Packages: "dplyr" and "tidycensus"
+- tibble --> verb --> tibble
+- filter() --> pick rows
+- select() --> pick columns
+- mutate() --> modify dataframe (add new columns, summarize, etc.)
+- arrange() --> change order of rows (ascending/descending)
+- group_by/summarize() --> reduce rows
+- pipe (%>% or |>) can group functions
+
+### Census
+- Decennial census: 10 years, 10 questions
+- American Community Survey (ACS): ~2005 born, ~3% of households, every year + 5 year average
+- state --> county --> tract --> block groups --> block
+- M = margin of error
+- E = estimate
 
 ## Reflection
 
