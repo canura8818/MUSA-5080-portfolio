@@ -173,6 +173,11 @@ representative data, as outliers are better dealt with in larger sample sizes.
 
 ## What this means for policy
 
+<figure style="text-align: center;">
+  <img src="https://usmaps.com/wp-content/uploads/Maine-Counties-Cities-Map.jpg" alt="Maine Counties with Cities" style="height:600px;" />
+  <figcaption>Maine Counties and Cities Map</figcaption>
+</figure>
+
 The following counties had the highest margin of error (in order): Piscataquis,
 Franklin, Sagadahoc, and Lincoln county. These counties had some of the lowest
 populations in the entire state. Generally, smaller sample sizes yield more
@@ -192,8 +197,6 @@ appropriate allocation of funding for infrastructure and road development. This
 can be harmful when the data says another county has high travel time, despite
 that not being true, which can lead to funding cuts for a county that actually
 needs it.
-
-![Maine Counties with Cities](https://usmaps.com/wp-content/uploads/Maine-Counties-Cities-Map.jpg)
 
 ---
 
@@ -216,6 +219,7 @@ county_wide <- county_wide %>%
   mutate(moe_prop = moe_prop(myvarE, incomeE, myvarM, incomeM))
 head(county_wide)
 ```
+
 ### Write Function and Iterate
 
 Does the small-places-are-noisier pattern hold everywhere, or are some states different?
