@@ -17,7 +17,6 @@ execute:
 ## Setup
 
 ```{r}
-#| include: false
 library(tidyverse)
 library(tidycensus)
 library(sf)
@@ -62,7 +61,7 @@ data_2013 <- data_2013 %>%
 ```
 
 ### Notes from Article
-[Article link]<https://whyy.org/articles/new-census-figures-on-philly-neighborhoods-show-inequality-high-numbers-of-whites-living-in-poverty/>
+[Article link] <https://whyy.org/articles/new-census-figures-on-philly-neighborhoods-show-inequality-high-numbers-of-whites-living-in-poverty/>
 
 - Fairhill 61% poverty rate
 - 12% --> 26% poverty rate in Eastwick 
