@@ -1,0 +1,37 @@
+---
+title: "Week 3: ggplot & errors"
+description: "Working with overlapping intervals and ggplot syntax"
+date: 2026-09-11
+---
+
+## What We Did
+
+- Quiz
+- ggplot
+
+## Key Concepts
+
+### Coefficient of variation (CV)
+
+- Relative measure of sampling error
+ - Low CV < 15% --> high reliability
+ - Medium CV = 15-30% --> moderate reliability
+ - High CV > 30% --> low reliability
+
+### Measures of Uncertainty
+
+- Standard error (SE): MOE / 1.645
+- Derived uncertainty: margins of error of numerator and denominator can't be simply computed
+  - moe_sum   -> adding estimates together
+  - moe_prop  -> one estimate as share of another
+  - moe_ratio -> one not a subset of another
+
+### Change Over Time
+
+- Compare non-overlapping intervals: calculate change between intervals and uncertainty of both estimates
+- SE_diff: sqrt(SE1^2 + SE2^2)
+- CI of Change: Difference +- (1.645 * SE_diff)
+- CV = (SE / Estimate) x 100
+- z = change / SE_diff
+- significant = abs(z) > 1.645
+- Compare overlapping intervals: 

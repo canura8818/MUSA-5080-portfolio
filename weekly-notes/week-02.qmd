@@ -1,6 +1,6 @@
 ---
 title: "Week 2: Census Data"
-description: "table functions and acs data"
+description: "Table functions and ACS data"
 date: 2026-09-04
 ---
 
@@ -9,6 +9,7 @@ date: 2026-09-04
 - Quiz
 - dplyr package
 - dplyr practice
+- ACS data
 
 ## Key Concepts
 
@@ -28,7 +29,3 @@ date: 2026-09-04
 - state --> county --> tract --> block groups --> block
 - M = margin of error
 - E = estimate
-
-## Reflection
-
-## Questions

@@ -1,0 +1,68 @@
+---
+title: "Week 4: Coordinate Reference Systems"
+description: "Work with geo data"
+date: 2026-09-18
+---
+
+## What we did
+
+
+## Key concepts
+
+### Joining
+
+- join function: joins two tables by a column for rows that match
+- left/right_join: keep all observations in x/y
+- inner_join: only keep observations that are in both
+- full_join: keep observations in both
+- anti_join: keep observations that don't match between two tables
+
+### Geometry
+- shp: shape file
+- gdb: geodatabase
+- sf: simple features
+
+### Coordinate reference systems (CRS)
+The Earth is a geoid, which is an imperfect circle, that can be approximated
+with an ellipsoid (projection). Different flattening ratios for each CRS.
+
+- NAD27: Clarke's ellipsoid marked at Meades Ranch, KS (degrees)
+- NAD83: GRS-80 reference system, Earth-centered (degrees)
+- WGS84: Earth-centered (GPS standard)
+- Albers equal area (meters)
+
+### Ways to project
+1. cylindrical: based on latitude with no distortion
+2. transverse cylindrical: based on longitude with straight line of tangency
+3. conic: curved line of tangency
+4. planar: circular line of tangency
+5. conformal conic: good for high latitude countries 
+
+### what to preserve and what projection to use
+- Shapes: conformal conic (especially good for high latitude countries)
+- Areas: equal-area
+- Distance: equal-distance
+- Direction: :(
+
+Geographic
+- units:degrees
+
+Projected
+- good for local mapping
+- units: feet` or meters
+
+### R
+- st_set_crs(): relabel
+- st_transform(): change CRS
+- st_crs(): get CRS
+- st_buffer(): inner buffer of geometry
+- st_intersects(): do two geometry objects intersect
+- st_touches(): one point in common but not intersecting
+- st_within(): does every of A lie in B
+- st_filter(): subset by spatial feature
+- st_intersection(): returns intersection of two geometries
+- st_union(): merge two geometries with no overlap
+- st_join(): combine two objects based on geometric relationship
+- st_distance(): return minimum distance between two objects
+
+

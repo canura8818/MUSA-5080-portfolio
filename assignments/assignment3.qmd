@@ -1,0 +1,388 @@
+---
+title: "Assignment 3: Verify the Claim of Povery Change in Philadelphia"
+subtitle: "Testing a published claim about neighborhood change against the data behind it"
+author: "Tatar Anurakwongsri"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: true
+    code-summary: "Show code"
+    embed-resources: true
+execute:
+  warning: false
+  message: false
+---
+
+## Setup
+
+```{r}
+#| include: false
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(ggplot2)
+```
+
+---
+
+## Part 1 — Reconstruct
+
+```{r}
+vars <- c(total_poverty = "B17001_002",
+               total_pop = "B01003_001",
+               median_income = "B19013_001"
+               )
+
+data_2006 <- get_acs(
+  geography = "tract",
+  variables = vars,
+  state = "PA",
+  county = "Philadelphia",
+  year = 2010,
+  survey = "acs5",
+  geometry = TRUE,
+  output    = "wide"
+)
+data_2006 <- data_2006 %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326)
+
+data_2013 <- get_acs(
+  geography = "tract",
+  variables = vars,
+  state = "PA",
+  county = "Philadelphia",
+  year = 2017,
+  survey = "acs5",
+  geometry = TRUE,
+  output    = "wide"
+)
+data_2013 <- data_2013 %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326)
+```
+
+### Notes from Article
+[Article link]<https://whyy.org/articles/new-census-figures-on-philly-neighborhoods-show-inequality-high-numbers-of-whites-living-in-poverty/>
+
+- Fairhill 61% poverty rate
+- 12% --> 26% poverty rate in Eastwick 
+- 2% --> 19% poverty rate in Holmesburg 
+- Median household income of Tioga-Nicetown plummeted from 28,026 to 17,493
+
+### Variables of Interest
+
+- Poverty rate (total)
+- Median household income
+
+### Variable Codes
+- total_poverty: B17001_002
+- total_pop: B01003_001
+- median_income: B19013_001
+
+
+The article claims a 14% increase in poverty rate between the 2006-2010 and
+2013-2017 ACS data in the neighborhood of Eastwick, a 17% increase in poverty rate
+in Holmesburg, a drop in median household income in Tioga-Nicetown, and a 61% poverty
+rate in Fairhill.
+
+The article pointed variables of interest from the census tract: total poverty 
+rate, white poverty rate, median household income, and white population. Data from
+the 5-year ACS (2006-2010 & 2013-2017) and 2016 1-year ACS were used. The article
+states using these data tables while referencing the 2016-2017 ACS as the then-newest
+census data. I assumed some of the time period for some of the claims: Fairhill, Holmesburg,
+Tioga-Nicetown and the income gap. No years were specified for these so I assumed
+2013-2017 based on the title. The time periods that overlap are 2013-2017 and
+2016-2017. However, the 1-year ACS data is not available at the tract level due
+to the area 65,000 population requirement. The Census Bureau does not recommend
+comparing different time-period lengths as they measure characteristics of the
+population in different ways. 
+
+
+### Load Neighborhood Data
+```{r}
+github_path <- "https://raw.githubusercontent.com/opendataphilly/odp-data-storage/5c4538b5f4d2a26a81b7fab2d0006d327a39e3d0/philadelphia-neighborhoods/philadelphia-neighborhoods.geojson"
+
+neighborhoods <- st_read(github_path)
+neighborhoods <- st_make_valid(neighborhoods) # Fix broken geometry of neighborhoods
+
+neighborhoods_2006 <- data_2006 %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+  st_transform(st_crs(neighborhoods)) %>%
+  st_join(neighborhoods) %>%
+  st_drop_geometry()
+
+neighborhoods_2013 <- data_2013 %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+  st_transform(st_crs(neighborhoods)) %>%
+  st_join(neighborhoods) %>%
+  st_drop_geometry()
+```
+
+I used a new method from the sf package called st_make_valid to fix the geometry error during data import.
+
+
+### Aggregate Data by Neighborhood
+```{r}
+grouped_neighborhoods_2006 <- neighborhoods_2006 %>%
+  group_by(LISTNAME) %>%
+  summarise(
+    total_pop = sum(total_popE, na.rm = TRUE),
+    total_pop_moe = moe_sum(moe = total_popM, estimate = total_popE, na.rm = TRUE),
+    
+    total_poverty = sum(total_povertyE, na.rm = TRUE),
+    total_poverty_moe = moe_sum(moe = total_povertyM, estimate = total_povertyE, na.rm = TRUE),
+    
+    median_income = sum(median_incomeE, na.rm = TRUE),
+    median_income_moe = moe_sum(moe = median_incomeM, estimate = median_incomeE, na.rm = TRUE)
+  )
+
+grouped_neighborhoods_2013 <- neighborhoods_2013 %>%
+  group_by(LISTNAME) %>%
+  summarise(
+    total_pop = sum(total_popE, na.rm = TRUE),
+    total_pop_moe = moe_sum(moe = total_popM, estimate = total_popE, na.rm = TRUE),
+    
+    total_poverty = sum(total_povertyE, na.rm = TRUE),
+    total_poverty_moe = moe_sum(moe = total_povertyM, estimate = total_povertyE, na.rm = TRUE),
+    
+    median_income = sum(median_incomeE, na.rm = TRUE),
+    median_income_moe = moe_sum(moe = median_incomeM, estimate = median_incomeE, na.rm = TRUE)
+  )
+```
+
+The aggregation of neighborhoods worked perfectly fine. The only data irregularities
+are found in the airport area for the 5-year ACS, which yielded little to no estimates.
+On the other hand, the northeast philadelphia airport reported statistics. However, 
+this is likely due to the lack of residents living in the immediate proximity of the 
+airport (assuming this is the international airport). Interestingly, the 2016
+1-year ACS has data estimates for the airport neighborhood.
+
+## Part 2: Test
+
+### Calculate Poverty Rate
+```{r}
+grouped_neighborhoods_2006 <- grouped_neighborhoods_2006 %>%
+  mutate(pov_rate = (total_poverty / total_pop) * 100,
+         pov_rate_moe = moe_prop(total_poverty, total_pop, total_poverty_moe, total_pop_moe),
+         pov_moe_pct = (pov_rate_moe / pov_rate) * 100) %>%
+  mutate(reliability = case_when(
+  pov_moe_pct < 12  ~ "High",
+  pov_moe_pct < 40 ~ "Moderate",
+  TRUE         ~ "Low"
+  ))
+  
+grouped_neighborhoods_2013 <- grouped_neighborhoods_2013 %>%
+  mutate(pov_rate = (total_poverty / total_pop) * 100,
+         pov_rate_moe = moe_prop(total_poverty, total_pop, total_poverty_moe, total_pop_moe),
+         pov_moe_pct = (pov_rate_moe / pov_rate) * 100) %>%
+  mutate(reliability = case_when(
+  pov_moe_pct < 12  ~ "High",
+  pov_moe_pct < 40 ~ "Moderate",
+  TRUE         ~ "Low"
+  ))
+```
+
+### View Reliability of Each Neighborhood as a Data Table 
+
+```{r}
+library(gt)
+
+reliability_table <- grouped_neighborhoods_2006 %>%
+  mutate(
+    dot = case_when(
+      pov_moe_pct < 12  ~ "🟢",
+      pov_moe_pct <= 40 ~ "🟡",
+      TRUE              ~ "🔴"
+    ),
+    flag = case_when(
+      pov_moe_pct < 12  ~ "Reliable",
+      pov_moe_pct <= 40 ~ "Somewhat reliable",
+      TRUE              ~ "Unreliable"
+    ),
+  ) %>%
+  arrange(desc(pov_moe_pct)) %>%
+  select(dot, LISTNAME, pov_rate, pov_rate_moe, pov_moe_pct, flag)
+
+reliability_table %>%
+  gt() %>%
+  fmt_number(columns = c(pov_rate, pov_rate_moe), decimals = 0) %>%
+  fmt_number(columns = pov_moe_pct, decimals = 1) %>%
+  cols_label(
+    dot               = "",
+    LISTNAME          = "Neighborhood",
+    pov_rate          = "Poverty Rate",
+    pov_rate_moe      = "MOE",
+    pov_moe_pct       = "CV (%)",
+    flag              = "Reliability"
+  ) %>%
+  cols_align(align = "center", columns = dot) %>%
+  tab_header(
+    title    = "Population below 100% of the poverty level",
+    subtitle = "Philadelphia Neighborhoods, ACS 2006-2010 5-year estimates"
+  ) %>%
+  tab_source_note(
+    "Reliability thresholds follow Jurjevich et al. (2018): CV < 12% reliable, 12–40% somewhat reliable, > 40% unreliable."
+  )
+```
+
+```{r}
+reliability_table <- grouped_neighborhoods_2013 %>%
+  mutate(
+    dot = case_when(
+      pov_moe_pct < 12  ~ "🟢",
+      pov_moe_pct <= 40 ~ "🟡",
+      TRUE              ~ "🔴"
+    ),
+    flag = case_when(
+      pov_moe_pct < 12  ~ "Reliable",
+      pov_moe_pct <= 40 ~ "Somewhat reliable",
+      TRUE              ~ "Unreliable"
+    ),
+  ) %>%
+  arrange(desc(pov_moe_pct)) %>%
+  select(dot, LISTNAME, pov_rate, pov_rate_moe, pov_moe_pct, flag)
+
+reliability_table %>%
+  gt() %>%
+  fmt_number(columns = c(pov_rate, pov_rate_moe), decimals = 0) %>%
+  fmt_number(columns = pov_moe_pct, decimals = 1) %>%
+  cols_label(
+    dot               = "",
+    LISTNAME          = "Neighborhood",
+    pov_rate          = "Poverty Rate",
+    pov_rate_moe      = "MOE",
+    pov_moe_pct       = "CV (%)",
+    flag              = "Reliability"
+  ) %>%
+  cols_align(align = "center", columns = dot) %>%
+  tab_header(
+    title    = "Population below 100% of the poverty level",
+    subtitle = "Philadelphia Neighborhoods, ACS 2006-2010 5-year estimates"
+  ) %>%
+  tab_source_note(
+    "Reliability thresholds follow Jurjevich et al. (2018): CV < 12% reliable, 12–40% somewhat reliable, > 40% unreliable."
+  )
+```
+
+
+### Calculate change between two time periods and margin of error of this change
+
+```{r}
+selected_2006 <- select(grouped_neighborhoods_2006, 
+                        c(LISTNAME, pov_rate_2006 = pov_rate, pov_moe_2006 = pov_rate_moe,
+                          median_income_2006 = median_income, income_moe_2006 = median_income_moe))
+selected_2013 <- select(grouped_neighborhoods_2013,
+                        c(LISTNAME, pov_rate_2013 = pov_rate, pov_moe_2013 = pov_rate_moe,
+                          median_income_2013 = median_income, income_moe_2013 = median_income_moe))
+
+comparison_df <- inner_join(selected_2006,selected_2013, by = "LISTNAME") %>%
+  na.omit(comparison_df)
+
+pov_comparison <- comparison_df %>%
+  mutate(
+    pov_change = pov_rate_2013 - pov_rate_2006,
+    se_1     = pov_moe_2013 / 1.645,
+    se_2     = pov_moe_2006 / 1.645,
+    se_diff  = sqrt(se_1^2 + se_2^2),
+    moe_diff = se_diff * 1.645,
+    z        = pov_change / se_diff,
+    significant = abs(z) > 1.645
+  )
+
+income_comparison <- comparison_df %>%
+  mutate(
+    income_change = median_income_2013 - median_income_2006,
+    se_1     = income_moe_2013 / 1.645,
+    se_2     = income_moe_2006 / 1.645,
+    se_diff  = sqrt(se_1^2 + se_2^2),
+    moe_diff = se_diff * 1.645,
+    z        = income_change / se_diff,
+    significant = abs(z) > 1.645
+  )
+
+pov_comparison %>%
+  count(significant)
+```
+
+
+### View Biggest Percent Changes
+```{r}
+pov_comparison %>%
+  filter(significant) %>%
+  ggplot(aes(x = reorder(LISTNAME, pov_change), y = pov_change)) +
+  geom_col(aes(fill = pov_change > 0)) +
+  geom_errorbar(aes(ymin = pov_change - moe_diff,
+                    ymax = pov_change + moe_diff), width = 0.3) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Statistically significant change in poverty count",
+       subtitle = "2006–2010 vs 2013–2017, ACS 5-year estimates",
+       x = "Neighborhoods", y = "Change in people below poverty level (%)")
+
+```
+
+
+All neighborhoods that had data were highly reliable. The only unreliable
+neighborhood was the airport, which didn't have any data in the first place. Out 
+of the 159 neighborhoods, all 159 had statistically significant changes to their
+poverty rate. East Park, Navy Yard, Brewerytown, and Packer Park experienced the 
+biggest decrease in poverty rate, while Penrose and Chinatown saw the greatest 
+rise in poverty rate.
+
+The only neighborhood that produce NAs was the airport, because its population and poverty
+columns were 0 due to no one living there. Division with 0 will produce NAs as it 
+is not possible. Because it was the only neighborhood that had an NA, I removed it 
+from the comparison data frame. If there had been more neighborhoods with NAs, I would
+explore ACS data sets from other years to find more complete data.
+
+
+## Part 3: Adjudicate
+
+### Poverty-Related Claims
+```{r}
+pov_comparison %>%
+  filter(LISTNAME == 'Eastwick')
+
+pov_comparison %>%
+  filter(LISTNAME == 'Holmesburg')
+
+pov_comparison %>%
+  filter(LISTNAME == 'Fairhill')
+```
+
+### Income-related claims
+```{r}
+income_comparison %>%
+  filter(LISTNAME %in% c("Tioga", "Nicetown"))
+```
+
+1. Claims that are supported
+
+The poverty rate in Eastwick did indeed increased from 12% to 26% between the
+2006-2010 and 2013-2017 ACS. The high reliability also indicates this statistic
+is trustworthy. 
+
+2. Claims that are unsupported
+
+Fairhill did not have a 61% poverty rate in either ACS data sets, as the
+poverty rate hovered around 55%. The Holmesburg claim is completely wrong. The
+poverty rate was never 2% and never reach the 19% as the article suggests. Its
+poverty rate was 14% in 2006-2010 and increased significantly to ~18% in
+2013-2017. Lastly, the median income of Nicetown decreased significantly, but did 
+not match the figures the article suggested. In 2006-2010, the median household
+income of Nicetown was 99,815, decreasing to 72,443 by the time of the next
+5-year ACS. Tioga had a median household income of 307,688 in 2006-2010, declining 
+to 296,165 by 2013-2017, which was an insignificant decrease.
+
+## Part 4: Rewrite
+
+Between the 2006-2010 and 2013-2017 ACS data sets, the Eastwick neighborhood
+experienced a poverty rate increase from 12% to 26%, which was statistically
+significant. Holemesburg saw a 4% increase in its poverty rate, which was significant
+in the neighborhood's context. Fairhill had a high, but consistent poverty rate
+of 55% across the two ACS time spans. Lastly, both Tioga and Nicetown experienced
+a decrease in median income: 307,688 to 296,165 for the former and 99,815 to 72,443
+for the latter. Due to the high median income in Tioga, this was not a significant
+change. However, the decrease in income was significant for Nicetown.
+
