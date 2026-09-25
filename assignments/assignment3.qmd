@@ -28,6 +28,8 @@ library(ggplot2)
 ## Part 1 — Reconstruct
 
 ```{r}
+#| message: false
+#| results: hide
 vars <- c(total_poverty = "B17001_002",
                total_pop = "B01003_001",
                median_income = "B19013_001"
@@ -61,7 +63,7 @@ data_2013 <- data_2013 %>%
 ```
 
 ### Notes from Article
-[Article link] <https://whyy.org/articles/new-census-figures-on-philly-neighborhoods-show-inequality-high-numbers-of-whites-living-in-poverty/>
+[Article link](https://whyy.org/articles/new-census-figures-on-philly-neighborhoods-show-inequality-high-numbers-of-whites-living-in-poverty/)
 
 - Fairhill 61% poverty rate
 - 12% --> 26% poverty rate in Eastwick 
