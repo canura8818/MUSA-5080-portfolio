@@ -1,0 +1,552 @@
+---
+title: "Assignment: Building Features, Watching What Happens"
+subtitle: "MUSA 5080 · Integrates Weeks 1–5 · Due Friday, October 16"
+author: "Tatar Anurakwongsri"
+format:
+  html:
+    toc: true
+    code-fold: show
+    code-tools: true
+execute:
+  warning: false
+  message: false
+freeze: false
+---
+
+## Part 0: Setup
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(caret)
+
+Sys.getenv("CENSUS_API_KEY") != ""   # should print TRUE
+```
+
+### The cross-validation helper
+
+This function runs 10-fold cross-validation with the same seed every time, so every model in the log is tested on the same folds.
+
+```{r}
+#| label: cv-helper
+ctrl <- trainControl(method = "cv", number = 10)
+
+cv_rmse <- function(formula, data) {
+  df <- if (inherits(data, "sf")) st_drop_geometry(data) else data
+  vars <- all.vars(formula)
+  bad <- vars[sapply(vars, function(v) any(is.na(df[[v]])))]
+  if (length(bad) > 0) {
+    stop("These variables have NAs: ", paste(bad, collapse = ", "),
+         ". Fill them or choose another variable (Rule 1: don't drop rows).")
+  }
+  set.seed(5080)
+  fit <- train(formula, data = df, method = "lm", trControl = ctrl)
+  fit$results$RMSE
+}
+```
+
+### The model log
+
+```{r}
+#| label: log-start
+model_log <- tibble(
+  model   = character(),
+  added   = character(),
+  cv_rmse = numeric(),
+  notes   = character()
+)
+```
+
+---
+
+## Part 1: Choose outcome
+
+### 1A: Pull outcome and baseline predictors
+
+```{r}
+#| output: false
+#| label: pull
+
+# Dependent: % workers commuting by public transit B08301_010 / B08301_001
+# mean travel time: B08013_001 ÷ B08303_001
+# B08201_002: % Zero-Vehicle Households
+# B25024_002: % 1-Unit, Detached Structures
+# B25003_003: % renter-occupied housing
+# B19013_001: Median income
+
+philly_tracts <- get_acs(
+  geography = "tract",
+  state = "PA",
+  county = "Philadelphia",
+  variables = c(
+    total_pop = "B01003_001",
+    public_transit = "B08301_010",
+    total_workers = "B08301_001",
+    no_vehicle = "B08201_002",
+    aggr_travel = "B08013_001",
+    travel_time = "B08303_001",
+    detached_units = "B25024_002",
+    renter_housing = "B25003_003",
+    med_income = "B19013_001"
+  ),
+  year = 2023,
+  output = "wide",
+  geometry = TRUE
+) %>%
+  st_transform(2272)
+```
+
+```{r}
+#| label: build-outcome
+philly_tracts <- philly_tracts %>%
+  mutate(
+    pct_public_transit = public_transitE / total_workersE * 100,
+    PPT_moe = moe_prop(public_transitE, total_workersE, public_transitM, total_workersM),
+    PPT_cv = (PPT_moe / 1.645) / pct_public_transit * 100,
+    mean_travel = aggr_travelE / travel_timeE
+  )
+```
+
+### 1B: Is it reliable enough to model?
+
+```{r}
+#| label: reliability
+# How many tracts have no value for your outcome?
+sum(is.na(philly_tracts$pct_public_transit))
+
+# How reliable is it?
+summary(philly_tracts$PPT_cv)
+
+philly_tracts %>%
+  mutate(reliability = case_when(
+    PPT_cv < 12  ~ "High",
+    PPT_cv <= 40 ~ "Moderate",
+    TRUE       ~ "Low"
+  )) %>%
+  st_drop_geometry() %>%
+  count(reliability)
+
+# What does the distribution look like?
+ggplot(philly_tracts, aes(x = pct_public_transit)) +
+  geom_histogram(bins = 30) +
+  theme_minimal()
+```
+
+The response variable has high reliability, with a normal distribution slightly
+skewed to the right. Percent of workers taking public transport is a reflection
+of how well transit is in Philadelphia and could point towards planning that is
+skewed towards automobile transit.
+
+### 1C: Decide which tracts to model
+
+Filter once, here, and never again. Every later step uses `tracts`.
+
+```{r}
+#| label: filter
+tracts <- philly_tracts %>%
+  filter(!is.na(total_popE),
+         !is.na(mean_travel),
+         !is.na(no_vehicleE),
+         !is.na(detached_unitsE),
+         !is.na(renter_housingE),
+         !is.na(med_incomeE),
+         )
+
+nrow(philly_tracts)
+nrow(tracts)
+```
+
+```{r}
+# Get rows that were lost
+setdiff(philly_tracts, tracts)
+```
+
+28 tracts were lost, with many missing median income information. There were
+many high numbered tracts with some having a decimal, which is the result of the
+tracts being modified.
+
+---
+
+## Part 2: Baseline model
+
+### 2A: Look first
+
+```{r}
+#| label: look
+# one scatterplot per predictor, e.g.:
+library(psych)
+predictors <- tracts %>%
+  st_drop_geometry() %>%
+  select(
+    pct_public_transit,
+    no_vehicleE, 
+    detached_unitsE, 
+    renter_housingE, 
+    med_incomeE, 
+    mean_travel
+  ) %>%
+  drop_na()
+pairs.panels(predictors, smooth=TRUE)
+```
+
+### 2B: Fit and log
+
+```{r}
+#| label: m1
+f1 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel
+
+m1 <- lm(f1, data = tracts)
+summary(m1)
+
+model_log <- model_log %>%
+  add_row(model = "m1", added = "ACS baseline",
+          cv_rmse = cv_rmse(f1, tracts),
+          notes = "On tracts it hasn't seen, the baseline model misses by about 8.5%")
+
+model_log
+```
+
+### 2C: Where is the baseline wrong?
+
+```{r}
+#| label: resid-map-1
+tracts <- tracts %>% mutate(resid_m1 = residuals(m1))
+
+ggplot(tracts) +
+  geom_sf(aes(fill = resid_m1), color = NA) +
+  scale_fill_gradient2(low = "#2166ac", mid = "grey95", high = "#b2182b", midpoint = 0) +
+  theme_void() +
+  labs(title = "Baseline model: where it's wrong",
+       subtitle = "Red = actual higher than predicted",
+       fill = "Residual")
+```
+The model is under predicting around West Philadelphia and Brewerytown. Perhaps the
+large student population in both areas are inflating the number of people using
+public transport. The model over predicts near the Northeast Philadelphia Airport,
+due to the increased availability of public transport towards the airport. 
+
+---
+
+## Part 3: Getting data from Philadelphia's open data portal
+
+```{r}
+#| label: carto-helper
+carto_get <- function(sql) {
+  url <- paste0("https://phl.carto.com/api/v2/sql?format=GeoJSON&q=", URLencode(sql))
+  st_read(url, quiet = TRUE)
+}
+```
+
+
+### Pull data
+
+```{r}
+#| label: my-layers
+trolley_stop <- st_read("https://hub.arcgis.com/api/v3/datasets/627fb25b9af14d2ab45fd3c8d65564b1_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1") %>%
+  st_transform(st_crs(tracts))
+
+afrd_housing <- st_read("https://hub.arcgis.com/api/v3/datasets/ca8944190b604b2aae7eff17c8dd9ef5_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1") %>%
+  st_transform(st_crs(tracts))
+
+reg_rail <- st_read("https://hub.arcgis.com/api/v3/datasets/281807e0099f461c8ae3db9ef4347970_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1") %>%
+  st_transform(st_crs(tracts))
+
+colleges <- st_read("https://hub.arcgis.com/api/v3/datasets/8ad76bc179cf44bd9b1c23d6f66f57d1_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1") %>%
+  st_transform(st_crs(tracts))
+```
+
+The trolley stop summaries provides ridership information, which will give insight
+into the amount of traffic at different stops. This can be helpful in approximating
+college student ridership by looking at stops in close proximity to universities.
+Unfortunately, bus data were only available in .csv form and in years after 2023.
+With the assumption that college students live in cheaper housing around 
+universities, this data set will provide insight into the proximity of affordable
+housing to universities.
+
+---
+
+## Part 4: Building spatial features
+
+### Part 4A: Build spatial features
+
+```{r}
+#| label: my-spatial
+
+# Issue: Is public transportation inflated near colleges due to students?
+# Assess: Use number of riders and affordable units near colleges to approximate number of college students
+
+rental_afrd <- afrd_housing %>%
+  filter(project_type == "Rental")
+
+tracts <- tracts %>%
+  mutate(n_afrd_properties = lengths(st_intersects(., rental_afrd)),
+         n_afrd_units = sapply(st_intersects(., rental_afrd), function(idx) {
+           sum(rental_afrd$total_units[idx], na.rm = TRUE)
+           }),
+         n_trolley_riders = sapply(st_intersects(., trolley_stop), function(idx) {
+           sum(trolley_stop$Weekday_On[idx], na.rm = TRUE)
+           }),
+         )
+
+tracts <- tracts %>%
+  mutate(area_sqmi         = as.numeric(st_area(.)) / 27878400,
+         afrd_units_per_1k = sum(n_afrd_units) / total_popE * 1000,
+         riders_per_sqmi  = n_trolley_riders / area_sqmi
+         )
+
+```
+
+
+```{r}
+#| label: College Proximity
+tract_pts <- st_point_on_surface(tracts)
+nearest_college_idx <- st_nearest_feature(tract_pts, colleges)
+tracts <- tracts %>%
+  mutate(
+    dist_college_mi = as.numeric(
+      st_distance(tract_pts, colleges[nearest_college_idx, ], by_element = TRUE)
+    ) / 5280
+  )
+```
+
+
+```{r}
+#| label: Northeast Airport
+NE_airport <- st_sfc(st_point(c(-75.0106, 40.0819)), crs = 4326) %>%
+  st_transform(st_crs(tracts))
+
+tracts <- tracts %>%
+  mutate(dist_airport_mi = as.numeric(st_distance(tract_pts, NE_airport)) / 5280)
+```
+
+
+### Part 4B: Fit to model, cross-validate, and log
+```{r}
+f2 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + afrd_units_per_1k
+
+model_log <- model_log %>%
+  add_row(model = "m2", added = "Affordable rental units per 1000 residents",
+          cv_rmse = cv_rmse(f2, tracts),
+          notes = "Lowered CV RMSE")
+
+# repeat for each feature
+model_log
+```
+
+```{r}
+f3 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + riders_per_sqmi
+
+model_log <- model_log %>%
+  add_row(model = "m3", added = "Number of riders per square mile",
+          cv_rmse = cv_rmse(f3, tracts),
+          notes = "Increased CV RMSE")
+
+# repeat for each feature
+model_log
+```
+
+```{r}
+f4 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + dist_college_mi
+
+model_log <- model_log %>%
+  add_row(model = "m4", added = "Distance to Nearest College",
+          cv_rmse = cv_rmse(f4, tracts),
+          notes = "Lowered CV RMSE")
+
+# repeat for each feature
+model_log
+```
+
+```{r}
+f5 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + dist_airport_mi
+
+model_log <- model_log %>%
+  add_row(model = "m5", added = "Distance to NE Philadelphia Airport",
+          cv_rmse = cv_rmse(f5, tracts),
+          notes = "Lowered CV RMSE")
+
+# repeat for each feature
+model_log
+```
+
+Adding the density of affordable rental housing units slightly improved the model,
+but had very little effect. The density of riders actually made the model worse, observed
+through the increase in CV RMSE. Distance to colleges and the NE airport improved the
+model the most, with the latter reducing the CV RMSE by the largest margin.
+
+The rider density may not be a good predictor because of its mismatch with the
+dependent variable. Rider density measures all passengers at each stop while the 
+outcome variable measures whether people use public transit at all. Another
+reason could be due to multicollinearity with previous predictors like
+zero-vehicle households and % renting households.
+
+---
+
+## Part 5: Transforming features
+
+### 5A: Check variable feature distributions and log
+
+```{r}
+#| label: distributions
+
+ggplot(tracts, aes(x = mean_travel)) + geom_histogram(bins = 30) + theme_minimal()
+ggplot(tracts, aes(x = med_incomeE)) + geom_histogram(bins = 30) + theme_minimal()
+ggplot(tracts, aes(x = detached_unitsE)) + geom_histogram(bins = 30) + theme_minimal()
+ggplot(tracts, aes(x = renter_housingE)) + geom_histogram(bins = 30) + theme_minimal()
+ggplot(tracts, aes(x = no_vehicleE)) + geom_histogram(bins = 30) + theme_minimal()
+```
+
+```{r}
+#| label: transformations
+
+ggplot(tracts, aes(x = log1p(detached_unitsE))) + geom_histogram(bins = 30) + theme_minimal()
+
+ggplot(tracts, aes(x = med_incomeE, y = pct_public_transit)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", formula = y ~ x + I(x^2), se = FALSE, color = "red") +
+  theme_minimal()
+
+quantile(tracts$mean_travel)
+tracts <- tracts %>%
+  mutate(
+    travel_time = case_when(
+      mean_travel < 25 ~ "Short",
+      mean_travel < 35 ~ "Medium",
+      TRUE           ~ "Long"
+    ),
+    travel_time = factor(travel_time, levels = c("Short", "Medium", "Long"))
+  )
+
+tracts %>% st_drop_geometry() %>% count(travel_time)
+
+```
+
+### Fit transformations to model, cross-validate, and log
+
+```{r}
+#| label: log transform
+
+f_log <- pct_public_transit ~ no_vehicleE + log1p(detached_unitsE) + renter_housingE + med_incomeE + mean_travel
+
+model_log <- model_log %>%
+  add_row(model = "m6", added = "log of detached housing units",
+          cv_rmse = cv_rmse(f_log, tracts),
+          notes = "Increased CV RMSE")
+```
+
+```{r}
+#| label: exponential transform
+
+f_squared <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + I(med_incomeE^2) + mean_travel
+
+model_log <- model_log %>%
+  add_row(model = "m7", added = "Square of median income",
+          cv_rmse = cv_rmse(f_squared, tracts),
+          notes = "Increased CV RMSE")
+```
+
+```{r}
+#| label: categorical variable
+
+f_cat <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + travel_time
+
+model_log <- model_log %>%
+  add_row(model = "m8", added = "Travel time category",
+          cv_rmse = cv_rmse(f_cat, tracts),
+          notes = "Increased CV RMSE")
+
+m_cat <- lm(f_cat, data = tracts)
+summary(m_cat)
+```
+
+None of the transformations improved upon the baseline model. Compared to people
+with short commute times, people with medium commute times are slightly less likely
+to use public transit while people with long commute times are more likely to use
+public transit. However, the differences between the three levels are not significant.
+
+---
+
+## Part 6: Final model
+
+### 6A: Combine features and transformations based on CV RMSE
+
+```{r}
+#| label: final
+f_final <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + afrd_units_per_1k + dist_college_mi + dist_airport_mi
+
+m_final <- lm(f_final, data = tracts)
+summary(m_final)
+
+model_log <- model_log %>%
+  add_row(model = "final", added = "afrd_units_per_1k + dist_college_mi + dist_airport_mi",
+          cv_rmse = cv_rmse(f_final, tracts),
+          notes = "best model")
+
+model_log
+```
+
+### Part 6B: Where is the final model wrong?
+
+```{r}
+#| label: resid-map-2
+
+library(patchwork)
+
+p1 <- ggplot(tracts) +
+  geom_sf(aes(fill = resid_m1), color = NA) +
+  scale_fill_gradient2(low = "#2166ac", mid = "grey95", high = "#b2182b", midpoint = 0) +
+  theme_void() +
+  labs(title = "Baseline model: where it's wrong",
+       subtitle = "Red = actual higher than predicted",
+       fill = "Residual")
+
+tracts <- tracts %>% mutate(resid_final = residuals(m_final))
+
+p2 <- ggplot(tracts) +
+  geom_sf(aes(fill = resid_final), color = NA) +
+  scale_fill_gradient2(low = "#2166ac", mid = "grey95", high = "#b2182b", midpoint = 0) +
+  theme_void() +
+  labs(title = "Final model: where it's wrong",
+       subtitle = "Red = actual higher than predicted",
+       fill = "Residual")
+
+p1 + p2
+```
+
+The residuals around the NE airport area generally reduced in magnitude. One tract 
+near the NE airport that was over predicted actually had a higher residual than the
+initial model. Similarly, the over predicted tract in West Philly had a more extreme
+residual. Some under predicted areas in the Southeast got slightly better, but
+the bright red area around Brewerytown is still the same. Overall, the clusters
+stayed the same but the model became more accurate at predicting percent public
+transit users in the Northeast and Southwest area, but got slightly worse in
+specific tracts.
+
+### Part 6C: Are the biggest misses in the least reliable tracts?
+
+```{r}
+#| label: fog
+ggplot(tracts, aes(x = PPT_cv, y = abs(resid_final))) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(se = FALSE) +
+  labs(x = "CV of your outcome estimate (%)", y = "Size of the miss") +
+  theme_minimal()
+```
+
+---
+
+## Part 7: Reflection
+
+1. First, I would have liked to look at bus ridership since it has more overall coverage, but there were no data for 2023. The feature that lowered CV RMSE the most was distance to the Northeast Philadelphia Airport. This was reflected in the residuals around the airport decreasing in the second residual plot. The abundance of public transit in the forms of regional rail and L1 likely made this area a strong outlier in terms of public transit commuters. In comparison, other jobs around the city likely has less accessible public transit, making workers consider different options. The travel time category was the most disappointing because there was a weak positive relationship with the variable of interest observed in the correlation coefficient and scatter plot. Conceptually, this relationship makes sense, since longer travel times mean gas may not be efficient, so taking public transport would be the better option. However, adding the travel time categories actually made the prediction slightly worse. This could be due to the cutoff at each level not being representative and the variable is better as a continuous predictor.
+
+2. For every mile closer to a college, the % of people taking public transport to work decreases by 1.27%. When comparing tracts A and B, if A was 1 mile away from a college, the model predicts tract A to have 1.27% less people taking public transport.
+
+3. There are 3 census tracts that had extreme residuals that I would like to look at: one in West Philly, tracts in Brewery town, and one near NE airport. The tracts in West Philly and NE airport were over predicted, so I would want to look more closely at traffic congestion and road infrastructure since these variables are closely tied to whether or not a person decides to use a car. Using Google Street Map view could be a way to personally verify this, but the city of Philadelphia likely has data on these variables. For the tracts in Brewery town, getting the number of businesses and looking at the zoning ordinance to approximate how many go there for work would be the next step to prevent under predicting. The zoning ordinance and businesses geodata should be available on the opendataphilly website.
+
+4. Since the CV of most data points are very low, it is unlikely due to statistical noise, but rather model error. For example, the samples that were a big miss also had relatively low CVs. The line does not indicate there is a trend in the estimate CV and the residual size. In conclusion, model training has to be more comprehensive to reduce the errors.
+
+
+---
+

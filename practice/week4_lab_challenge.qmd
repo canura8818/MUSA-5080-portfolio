@@ -284,14 +284,14 @@ Instead, find the nearest station for each tract, then measure only that one dis
 
 ```{r}
 #| label: nearest
-nearest_idx <- st_nearest_feature(centroids, ___)
+nearest_idx <- st_nearest_feature(centroids, stations)
 
 philly_tracts <- philly_tracts %>%
   mutate(
     dist_ft = as.numeric(
-      st_distance(centroids, stations[nearest_idx, ], by_element = ___)
+      st_distance(centroids, stations[nearest_idx, ], by_element = TRUE)
     ),
-    dist_mi = dist_ft / ___
+    dist_mi = dist_ft / 5280
   )
 
 summary(philly_tracts$dist_mi)
@@ -306,7 +306,7 @@ Build a **half-mile** zone around every station and merge the circles into one s
 ```{r}
 #| label: buffer
 station_zone <- stations %>%
-  st_buffer(dist = ___) %>%
+  st_buffer(dist = 2640) %>%
   st_union()
 ```
 
@@ -315,7 +315,7 @@ station_zone <- stations %>%
 ```{r}
 #| label: filter-disjoint
 outside_zone <- philly_tracts %>%
-  st_filter(station_zone, .predicate = ___)
+  st_filter(station_zone, .predicate = st_intersects)
 
 nrow(outside_zone)
 ```

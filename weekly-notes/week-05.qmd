@@ -1,0 +1,30 @@
+---
+title: "Week 5: Machine learning"
+description: "Machine learning"
+date: 2026-09-25
+---
+
+## Key Concepts
+
+- Linear regression (SLR, MLR)
+  - $\hat{y} = \beta_0 + \beta_1 x_1$
+  - Least squares: minimize sum of square errors ($\sum residuals^2$)
+- Lasso/Ridge
+- Logistic
+- Decision trees
+- Random forest
+- Boosted trees
+- Neural networks
+
+### Types of model:
+1. Parametric: assume functional form, fixed parameters with strict assumptions
+2. Non-parametric: flexible form, parameters grow with size of data
+
+### Fit vs Prediction
+- $R^2$ gives the proportion of total variation of outcomes explained by the model
+- Train/test sets (80/20) --> cross validation --> k-folds
+  - train/test/validation (70/20/10)
+  - validation used for hyperparameter tuning *after* test set
+- RMSE gives average magnitude of residuals (lower is better)
+- Multicollinearity: predictors correlated with each other
+  - check for no pattern or constant variance in residuals (homoscedasticity)
