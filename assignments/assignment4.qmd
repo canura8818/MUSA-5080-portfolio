@@ -1,7 +1,8 @@
 ---
 title: "Assignment 4: Building Features, Watching What Happens"
-subtitle: "MUSA 5080"
+subtitle: "Build census and spatial features on Philadelphia social issue"
 author: "Tatar Anurakwongsri"
+date: today
 format:
   html:
     toc: true
