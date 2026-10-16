@@ -243,6 +243,7 @@ carto_get <- function(sql) {
 ### Pull data
 
 ```{r}
+#| output: false
 #| label: my-layers
 trolley_stop <- st_read("https://hub.arcgis.com/api/v3/datasets/627fb25b9af14d2ab45fd3c8d65564b1_0/downloads/data?format=geojson&spatialRefId=4326&where=1%3D1") %>%
   st_transform(st_crs(tracts))
@@ -277,43 +278,58 @@ housing to universities.
 # Issue: Is public transportation inflated near colleges due to students?
 # Assess: Use number of riders and affordable units near colleges to approximate number of college students
 
+# Only interested in rentals
 rental_afrd <- afrd_housing %>%
   filter(project_type == "Rental")
 
+# Calculate count of colleges and affordable housing units per tract
 tracts <- tracts %>%
-  mutate(n_afrd_properties = lengths(st_intersects(., rental_afrd)),
-         n_afrd_units = sapply(st_intersects(., rental_afrd), function(idx) {
-           sum(rental_afrd$total_units[idx], na.rm = TRUE)
-           }),
-         n_trolley_riders = sapply(st_intersects(., trolley_stop), function(idx) {
-           sum(trolley_stop$Weekday_On[idx], na.rm = TRUE)
-           }),
-         )
+  mutate(n_college = lengths(st_intersects(., colleges)))
 
 tracts <- tracts %>%
-  mutate(area_sqmi         = as.numeric(st_area(.)) / 27878400,
-         afrd_units_per_1k = sum(n_afrd_units) / total_popE * 1000,
-         riders_per_sqmi  = n_trolley_riders / area_sqmi
-         )
+  mutate(n_afrd_units = lengths(st_intersects(., afrd_housing)))
 
+# Calculate affordable housing and college density
+tracts <- tracts %>%
+  mutate(area_sqmi          = as.numeric(st_area(.)) / 27878400,
+         afrd_units_per_1k  = sum(n_afrd_units) / total_popE * 1000,
+         colleges_per_sqmi  = n_college / area_sqmi
+         )
 ```
 
 
 ```{r}
-#| label: College Proximity
+#| label: Trolley Proximity
+
+# Calculate nearest trolley stop in each tract
 tract_pts <- st_point_on_surface(tracts)
-nearest_college_idx <- st_nearest_feature(tract_pts, colleges)
+nearest_trolley_idx <- st_nearest_feature(tract_pts, trolley_stop)
 tracts <- tracts %>%
   mutate(
-    dist_college_mi = as.numeric(
-      st_distance(tract_pts, colleges[nearest_college_idx, ], by_element = TRUE)
+    dist_trolley_mi = as.numeric(
+      st_distance(tract_pts, trolley_stop[nearest_trolley_idx, ], by_element = TRUE)
     ) / 5280
   )
 ```
 
 
 ```{r}
-#| label: Northeast Airport
+#| label: Regional Rail Proximity
+
+# Calculate nearest regional rail in each tract
+tract_pts <- st_point_on_surface(tracts)
+nearest_rail_idx <- st_nearest_feature(tract_pts, reg_rail)
+tracts <- tracts %>%
+  mutate(
+    dist_rail_mi = as.numeric(
+      st_distance(tract_pts, reg_rail[nearest_rail_idx, ], by_element = TRUE)
+    ) / 5280
+  )
+```
+
+
+```{r}
+#| label: Distance to Northeast Philadelphia Airport
 NE_airport <- st_sfc(st_point(c(-75.0106, 40.0819)), crs = 4326) %>%
   st_transform(st_crs(tracts))
 
@@ -335,23 +351,25 @@ model_log <- model_log %>%
 model_log
 ```
 
+
 ```{r}
-f3 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + riders_per_sqmi
+f3 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + colleges_per_sqmi
 
 model_log <- model_log %>%
-  add_row(model = "m3", added = "Number of riders per square mile",
+  add_row(model = "m3", added = "Number of colleges per square mile",
           cv_rmse = cv_rmse(f3, tracts),
-          notes = "Increased CV RMSE")
+          notes = "Decreased CV RMSE")
 
 # repeat for each feature
 model_log
 ```
 
+
 ```{r}
-f4 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + dist_college_mi
+f4 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + dist_trolley_mi
 
 model_log <- model_log %>%
-  add_row(model = "m4", added = "Distance to Nearest College",
+  add_row(model = "m4", added = "Distance to Nearest Trolley Stop",
           cv_rmse = cv_rmse(f4, tracts),
           notes = "Lowered CV RMSE")
 
@@ -359,12 +377,26 @@ model_log <- model_log %>%
 model_log
 ```
 
+
 ```{r}
-f5 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + dist_airport_mi
+f5 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + dist_rail_mi
 
 model_log <- model_log %>%
-  add_row(model = "m5", added = "Distance to NE Philadelphia Airport",
+  add_row(model = "m5", added = "Distance to Nearest Regional Rail",
           cv_rmse = cv_rmse(f5, tracts),
+          notes = "Lowered CV RMSE")
+
+# repeat for each feature
+model_log
+```
+
+
+```{r}
+f6 <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + dist_airport_mi
+
+model_log <- model_log %>%
+  add_row(model = "m6", added = "Distance to NE Philadelphia Airport",
+          cv_rmse = cv_rmse(f6, tracts),
           notes = "Lowered CV RMSE")
 
 # repeat for each feature
@@ -407,8 +439,9 @@ ggplot(tracts, aes(x = med_incomeE, y = pct_public_transit)) +
   geom_point(alpha = 0.4) +
   geom_smooth(method = "lm", formula = y ~ x + I(x^2), se = FALSE, color = "red") +
   theme_minimal()
+```
 
-quantile(tracts$mean_travel)
+```{r}
 tracts <- tracts %>%
   mutate(
     travel_time = case_when(
@@ -420,8 +453,8 @@ tracts <- tracts %>%
   )
 
 tracts %>% st_drop_geometry() %>% count(travel_time)
-
 ```
+
 
 ### Fit transformations to model, cross-validate, and log
 
@@ -431,10 +464,11 @@ tracts %>% st_drop_geometry() %>% count(travel_time)
 f_log <- pct_public_transit ~ no_vehicleE + log1p(detached_unitsE) + renter_housingE + med_incomeE + mean_travel
 
 model_log <- model_log %>%
-  add_row(model = "m6", added = "log of detached housing units",
+  add_row(model = "m7", added = "log of detached housing units",
           cv_rmse = cv_rmse(f_log, tracts),
           notes = "Increased CV RMSE")
 ```
+
 
 ```{r}
 #| label: exponential transform
@@ -442,10 +476,11 @@ model_log <- model_log %>%
 f_squared <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + I(med_incomeE^2) + mean_travel
 
 model_log <- model_log %>%
-  add_row(model = "m7", added = "Square of median income",
+  add_row(model = "m8", added = "Square of median income",
           cv_rmse = cv_rmse(f_squared, tracts),
           notes = "Increased CV RMSE")
 ```
+
 
 ```{r}
 #| label: categorical variable
@@ -453,7 +488,7 @@ model_log <- model_log %>%
 f_cat <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + travel_time
 
 model_log <- model_log %>%
-  add_row(model = "m8", added = "Travel time category",
+  add_row(model = "m9", added = "Travel time category",
           cv_rmse = cv_rmse(f_cat, tracts),
           notes = "Increased CV RMSE")
 
@@ -461,10 +496,10 @@ m_cat <- lm(f_cat, data = tracts)
 summary(m_cat)
 ```
 
-None of the transformations improved upon the baseline model. Compared to people
-with short commute times, people with medium commute times are slightly less likely
-to use public transit while people with long commute times are more likely to use
-public transit. However, the differences between the three levels are not significant.
+None of the transformations improved upon the baseline model. When compared to
+people with short commutes times, people with medium commute times are less likely 
+to use public transit and people with long commute times are more to use
+public transit. 
 
 ---
 
@@ -474,13 +509,13 @@ public transit. However, the differences between the three levels are not signif
 
 ```{r}
 #| label: final
-f_final <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + afrd_units_per_1k + dist_college_mi + dist_airport_mi
+f_final <- pct_public_transit ~ no_vehicleE + detached_unitsE + renter_housingE + med_incomeE + mean_travel + afrd_units_per_1k + dist_trolley_mi + dist_airport_mi
 
 m_final <- lm(f_final, data = tracts)
 summary(m_final)
 
 model_log <- model_log %>%
-  add_row(model = "final", added = "afrd_units_per_1k + dist_college_mi + dist_airport_mi",
+  add_row(model = "final", added = "afrd_units_per_1k + dist_trolley_mi + dist_airport_mi",
           cv_rmse = cv_rmse(f_final, tracts),
           notes = "best model")
 
@@ -519,7 +554,7 @@ The residuals around the NE airport area generally reduced in magnitude. One tra
 near the NE airport that was over predicted actually had a higher residual than the
 initial model. Similarly, the over predicted tract in West Philly had a more extreme
 residual. Some under predicted areas in the Southeast got slightly better, but
-the bright red area around Brewerytown is still the same. Overall, the clusters
+the bright red area around Brewery town is still the same. Overall, the clusters
 stayed the same but the model became more accurate at predicting percent public
 transit users in the Northeast and Southwest area, but got slightly worse in
 specific tracts.
@@ -539,7 +574,7 @@ ggplot(tracts, aes(x = PPT_cv, y = abs(resid_final))) +
 
 ## Part 7: Reflection
 
-1. First, I would have liked to look at bus ridership since it has more overall coverage, but there were no data for 2023. The feature that lowered CV RMSE the most was distance to the Northeast Philadelphia Airport. This was reflected in the residuals around the airport decreasing in the second residual plot. The abundance of public transit in the forms of regional rail and L1 likely made this area a strong outlier in terms of public transit commuters. In comparison, other jobs around the city likely has less accessible public transit, making workers consider different options. The travel time category was the most disappointing because there was a weak positive relationship with the variable of interest observed in the correlation coefficient and scatter plot. Conceptually, this relationship makes sense, since longer travel times mean gas may not be efficient, so taking public transport would be the better option. However, adding the travel time categories actually made the prediction slightly worse. This could be due to the cutoff at each level not being representative and the variable is better as a continuous predictor.
+1. First, I would have liked to look at bus ridership since it has more overall coverage, but there were no data for 2023. The feature that lowered CV RMSE the most was distance to the Northeast Philadelphia Airport. This was reflected in the residuals around the airport decreasing in the second residual plot. The abundance of public transit in the forms of regional rail and L1 likely made this area a strong outlier in terms of public transit commuters. In comparison, other jobs around the city likely has less accessible public transit, making workers consider different options. The travel time category was the most disappointing because there was a weak positive relationship with the variable of interest observed in the correlation coefficient and scatter plot. Conceptually, this relationship makes sense, since longer travel times mean gas may not be efficient, so taking public transport would be the better option. However, adding the travel time categories actually made the prediction slightly worse. This could be due to the cutoff at each level not being representative and the variable is better as a continuous predictor. I was also disappointed by the proximity to a regional rail, as that should had have a big effect on workers travelling long distances.
 
 2. For every mile closer to a college, the % of people taking public transport to work decreases by 1.27%. When comparing tracts A and B, if A was 1 mile away from a college, the model predicts tract A to have 1.27% less people taking public transport.
 

@@ -1,0 +1,57 @@
+---
+title: "Week 7: Spatial Autocorrelation in Errors"
+description: "Where is the model wrong?"
+date: 2026-10-16
+---
+
+## Key Concepts
+
+- Problem: small neighborhoods sometimes not included in training set
+- Solution: merge small groups before CV
+
+
+### Tracts to Houses
+
+|  | Previous assignment | House Price Prediction |
+| ----- | ----- | ----- |
+| Unit    | Census tract (polygon)      | Single sale (point)               |
+| n       | ~400                        | ~20,000                           |
+| Count   | crimes in the tract         | crimes within 660 ft of the house |
+| Nearest | distance to nearest station | mean distance to the 5 nearest    |
+| Place   | distance to City Hall       | same                              |
+
+- Specify sale brackets c("< $1k", "$1k–10k", "$10k–50k", "$50k >")
+- Filter out sale prices (self-determined so write down)
+- Buffer count vs kNN distance
+  - Compare with CV RMSE
+  - Are there error clusters?
+    - If near houses have related errors, the model is missing something about place.
+
+### Tober's First Law of Geography
+
+- All things are related but near things are more related
+- Spatial Lag: average of neighbor values (either Queen or Rook)
+- Slope of spatial lag vs residual plot gives Moran's I
+- Moran's I: "Am I above the mean and are my neighbors above the mean?"
+- High Moran's I:
+  - An amenity or disamenity you haven’t measured → spatial feature
+  - Something about the whole neighborhood → neighborhood fixed effect
+  - A relationship that differs by place → interaction
+  
+Right tool for inference about spillovers. For prediction it fails three ways:
+  - It needs neighbors’ prices. To price a house, you’d need the prices of houses that haven’t sold yet.
+  - It leaks. In CV, a test house’s neighbors in the training set carry its answer.
+  - It explains nothing. “Near expensive houses” is not a reason a policymaker can act on.
+  - Our rule: spatial features of X, never Y. Crime near the house is fine; prices near the house are not.
+
+| I	| Pattern	| For our errors |
+| ----- | ----- | ----- |
+| near +1 |	similar values cluster | the model is missing something about place |
+| near 0  | no spatial pattern	   | the errors look like noise in space        |
+| below 0 |	neighbors differ	     | rare for errors; check your weights        |
+
+### Monte-Carlo Simulation
+
+- moran.mc
+- Randomly assign residuals to different samples --> calculate Moran's I
+- Rank Moran's I with different permutations (proxy p-value)

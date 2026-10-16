@@ -1,0 +1,42 @@
+---
+title: "Week 6: Feature Engineering"
+description: "Feature transformations"
+date: 2026-10-09
+---
+
+## Key Concepts
+- CV RMSE: 
+- Log transformation
+  - Used to solve skewed variable distribution for linear regression
+  - log1p(x) if there are 0s in variable --> log(1+x)
+  - y ~ log(x): +1% of x = +$\beta$/100 of Y
+  - log(y) ~ x: 1-unit increase of x = +100*$\beta$% of y
+  - log(y) ~ log(x): +1% of x = +$\beta$% of y
+  - Taking log(y) makes looking RMSE useless (different scale) --> exp() to put y units back to same scale
+
+- Square
+  - Decide on visual basis (scatter plot)
+  - Deals with non-linear relationships between predictor and predicted variables
+  - Use I() in formula
+  - linear (+), squared (-) --> rises, then levels off or falls (bridge)
+  - linear (-), squared (+) --> falls, then rises (parabola)
+  - Turning point: -${\beta}x$ / (2 * ${\beta}x^2$)
+
+- Categorical
+  - Reasons:
+    - Variable is already one (zoning class, district, type, etc.)
+    - A number beahves like groups
+  - Create with case_when() --> manual bins or cut() --> even bins
+  - One left out as baseline (based on alphabetical order, otherwise indicated)
+  - Other category coefficients is the difference from baseline variable
+
+- Interactions
+  - Allows tilt in different groups of categorical variables
+  - Measures how much the effects of one predictor varies when another predictor's value changes
+  
+- Fixed Effects
+  - Categorical variable for a group of observations (usually a place: neighborhood, district, county)
+  - Example: assign tracts to different planning districts based on area majority
+  - Uses one location as a reference
+  - Good for geographic price prediction
+  
