@@ -2,7 +2,7 @@
 title: "Assignment 4: Building Features, Watching What Happens"
 subtitle: "Build census and spatial features on Philadelphia social issue"
 author: "Tatar Anurakwongsri"
-date: today
+date: 2026-10-16
 format:
   html:
     toc: true

@@ -2,7 +2,7 @@
 title: "Assignment 3: Verify the Claim of Povery Change in Philadelphia"
 subtitle: "Testing a published claim about neighborhood change against the data behind it"
 author: "Tatar Anurakwongsri"
-date: today
+date: 2026-09-25
 format:
   html:
     toc: true

@@ -1,0 +1,34 @@
+project:
+  type: website
+  output-dir: docs
+  execute-dir: project
+
+website:
+  title: "Tatar Anurakwongsri - MUSA 5080 Portfolio"
+  description: "Public Policy Analytics portfolio"
+  navbar:
+    title: "Portfolio"
+    left:
+      - href: index.qmd
+        text: Home
+      - href: about.qmd
+        text: About
+      - href: weekly-notes/index.qmd
+        text: "Weekly Notes"
+      - href: assignments/index.qmd
+        text: "Assignments"
+    right:
+      - icon: github
+        href: https://github.com/canura8818/MUSA-5080-portfolio
+format:
+  html:
+    theme: cosmo
+    toc: true
+    code-fold: false
+    code-tools: true
+
+execute:
+  freeze: auto
+  echo: true
+  warning: false
+  message: false
