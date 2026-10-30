@@ -1,0 +1,24 @@
+---
+title: "Week 8: "
+description: "Local indicator of spatial association"
+date: 2026-10-23
+---
+
+## Key Concepts
+- Moran's I of the residuals - do errors cluster?
+- Used for global measurements
+
+## LISA
+- Local indicator of spatial association
+- Row standardization before calculating Moran's I
+- Moran's I: deviation * neighbour's average / mean
+- spdep(style = "W") averages neighbors
+
+
+Neighbors under-predicted	| Neighbors over-predicted
+| --- | --- | --- |
+| I’m under-predicted |	High–High: a pocket the model undervalues. A missing amenity. |	High–Low: one house worth more than its block. Something about the house.|
+| I’m over-predicted | Low–High: one house worth less than its block. Something about the house. | Low–Low: a pocket the model overvalues. A missing disamenity.|
+
+- Clusters (HH, LL) point to a place: build a spatial feature.
+- Outliers (HL, LH) point to a house: check the data, or accept that OPA can’t see it either.

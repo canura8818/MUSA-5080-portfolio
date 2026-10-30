@@ -1,0 +1,908 @@
+---
+title: "Assignment 5: House Price Prediction, Chicago"
+subtitle: "MUSA 5080 · Team assignment"
+author: "Team Injera: Tatar & Thomas"
+date: 2026-10-30
+format:
+  html:
+    toc: true
+    code-fold: show
+execute:
+  warning: false
+  message: false
+---
+
+## The assignment
+
+In class we built a house price model for Philadelphia. Now your team does it for a city you haven't modeled: **Chicago**.
+
+The Cook County Assessor's Office has to value every home in the county, including the vast majority that didn't sell this year. Assessments drive property tax bills. When they're wrong in a systematic way, some households pay more than their share. A 2017 *Chicago Tribune* investigation, "The Tax Divide," found exactly that in Cook County: lower-value homes were assessed at higher shares of their worth than expensive ones.
+
+Build a model that predicts **single-family sale prices in Chicago, 2023–2025**, using only the tools from this course. The file contains **only features of the house itself**. Everything about location is yours to build.
+
+### A real test
+
+| File | What's in it |
+|---|---|
+| `chicago_train.csv` | About 80% of the houses, **with** sale prices |
+| `chicago_test.csv` | The other 20%, **without** sale prices. You predict them; we score you. |
+
+The test houses were held out by house, not by sale, so a house that sold twice is entirely on one side. Your CV RMSE is your estimate. Your test RMSE is the truth. **If they're far apart, something leaked.** 
+
+**Due:** Friday, October 30. All teammates renders the file on their portfolio and every member submits that link on Canvas. One teammate uploads `team_XX_predictions.csv`.
+
+**Individual accountability:** Q7 on October 30 asks each of you about *this* model: which features you used and why, your CV and test RMSE, and where the model fails worst. Make sure everyone can explain all of it.
+
+### Rules
+
+::: {.callout-important}
+## 1. Clean training rows once, in Part 1. Never drop test rows.
+You must predict every test house, so fill NAs in a feature rather than filtering.
+
+## 2. Stay inside the time window
+Open data from 2023–2025 only.
+
+## 3. No leakage
+Nothing built from sale prices. *Would the Assessor have this number for a house that didn't sell?*
+
+## 4. The outcome stays in dollars
+Transform predictors, not `sale_price`.
+
+## 5. No prices from the test fold or the future
+No features built from other houses' sale prices. 
+:::
+
+### Please include in your final rendered qmd for this assignment:
+
+| | |
+|---|---|
+| **Model log** | Every model you tried, in order, with CV RMSE and Moran's I. Each row has a note saying why you tried it. |
+| **Features** | Incorporate the feature engineering tricks - including the spatial ones covered these past few weeks. 
+| **Diagnostics** | Residual maps for your baseline and final model, and what changed. |
+| **Error analysis** | Where your final model fails worst, and whose homes it over-values (Part 4). |
+| **Reasoning** | Choices justified by evidence from your own analysis.
+
+---
+
+## Part 0: Setup (provided)
+
+These helpers are to help you get off the ground.
+
+```{r}
+#| label: setup
+library(tidyverse)
+library(tidycensus)
+library(sf)
+library(caret)
+library(spdep)
+library(nngeo)
+options(scipen = 999)
+```
+
+```{r}
+#| label: helpers
+check_na <- function(formula, df) {
+  vars <- all.vars(formula)
+  bad <- vars[sapply(vars, function(v) any(is.na(df[[v]])))]
+  if (length(bad) > 0) {
+    stop("These variables have NAs: ", paste(bad, collapse = ", "),
+         ". Fill them or choose another variable (Rule 1).")
+  }
+}
+
+# 10-fold CV RMSE, same folds every time
+cv_rmse <- function(formula, data) {
+  df <- if (inherits(data, "sf")) st_drop_geometry(data) else data
+  check_na(formula, df)
+  set.seed(5080)
+  fit <- train(formula, data = df, method = "lm",
+               trControl = trainControl(method = "cv", number = 10))
+  fit$results$RMSE
+}
+
+# Each house's prediction from the fold where it was held out
+cv_pred <- function(formula, data) {
+  df <- if (inherits(data, "sf")) st_drop_geometry(data) else data
+  check_na(formula, df)
+  set.seed(5080)
+  fit <- train(formula, data = df, method = "lm",
+               trControl = trainControl(method = "cv", number = 10,
+                                        savePredictions = "final"))
+  fit$pred %>% arrange(rowIndex) %>% pull(pred)
+}
+
+# Chicago Data Portal (Socrata) -> sf. `where` is a SoQL filter.
+socrata_get <- function(dataset, where, select = NULL, limit = 200000) {
+  where <- str_squish(where)
+  q <- paste0("$where=", URLencode(where, reserved = TRUE), "&$limit=", limit)
+  if (!is.null(select)) q <- paste0(q, "&$select=", URLencode(str_squish(select), reserved = TRUE))
+  url <- paste0("https://data.cityofchicago.org/resource/", dataset, ".geojson?", q)
+  tmp <- tempfile(fileext = ".geojson")
+  resp <- tryCatch(download.file(url, tmp, quiet = TRUE), error = function(e) e)
+  if (inherits(resp, "error")) stop("Portal request failed. Open this URL in a browser to see why:\n", url)
+  st_read(tmp, quiet = TRUE)
+}
+```
+
+### Load both files together (provided)
+
+Build every feature on `all_sales`, so training and test houses get identical features. Split off `train` again whenever you add something.
+
+```{r}
+#| label: load
+
+root <- "C:/Users/chano/GitHubs/MUSA-5080-portfolio/assignments/assignment5/"
+
+# use file.path(root, "data", "XXX.csv")
+all_sales <- bind_rows(
+  read_csv(file.path(root, "data", "chicago_train.csv"), show_col_types = FALSE) %>% mutate(split = "train"),
+  read_csv(file.path(root, "data", "chicago_test.csv"),  show_col_types = FALSE) %>% mutate(split = "test")
+) %>%
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+  st_transform(3435)            # Illinois East State Plane, feet
+
+all_sales %>% st_drop_geometry() %>% count(split)
+```
+
+Useful sources: the [Chicago Data Portal](https://data.cityofchicago.org) (find a dataset's ID under its API button), the Census via `tidycensus`, and Cook County's open data.
+
+---
+
+## Part 1: Clean and explore
+
+Decide which training sales are market sales. Record each rule, why, and how many it removed. Then explore: at least four plots, including a map of price.
+
+```{r}
+#| label: part-1
+
+library(psych)
+
+colSums(is.na(all_sales))
+
+df <- all_sales %>%
+  mutate(lotsize_acre = replace_na(lotsize_acre, median(all_sales$lotsize_acre, na.rm = TRUE)),
+         sale_price = replace_na(sale_price, median(all_sales$sale_price, na.rm = TRUE))) %>%
+  replace_na(list(
+    num_half_baths = 0,
+    num_fireplaces = 0,
+    garage_size    = 0,
+    full_basement  = 0,
+    warmairfurnace = 0
+  ))
+```
+
+```{r}
+# Check for NAs again
+colSums(is.na(df))
+```
+
+
+```{r}
+# Summary statistics
+train <- df %>%
+  filter(split == "train")
+
+train %>%
+  st_drop_geometry(.) %>%
+  describe(., IQR = TRUE)
+```
+
+
+Most variables are categorical (house features). The continuous variables are sale price, building square footage, building age, and lot size in acres. Our response value is highly skewed and have extreme outliers, which can is evident from the range and standard deviations. The objective of this study is to fix the overestimated price predictions for lower value homes. This overevaluation may be a result of low and high outliers reducing the efficacy of model predictions. The variables 5 standard deviations away from the mean will be removed, but only after log transformations due to the high skewness of the dependent variable.
+
+
+
+```{r}
+# Look at some binary variables
+print("central air:")
+table(train$central_air)
+print("one story:")
+table(train$one_story)
+print("full basement:")
+table(train$full_basement)
+print("finished basement:")
+table(train$finished_basement)
+print("brick exit:")
+table(train$brick_stone_ext)
+print("furnace:")
+table(train$warmairfurnace)
+```
+
+
+```{r}
+# check variable distributions
+hist(train$sale_price, breaks = 30)
+hist(train$building_000sf, breaks = 30)
+hist(train$building_age, breaks = 30)
+hist(train$lotsize_acre, breaks = 30)
+hist(train$num_bedrooms)
+hist(train$num_full_baths)
+hist(train$num_half_baths)
+hist(train$num_fireplaces)
+hist(train$garage_size)
+```
+
+Continuous variables are heavily right-skewed, which indicates a log transformation may be necessary to meet linear regression assumptions.
+
+
+### Continuous variables
+```{r}
+# Look at correlation of continuous variables
+train %>%
+  select(sale_price, building_000sf, building_age, lotsize_acre) %>%
+  st_drop_geometry(.) %>%
+  pairs.panels(.)
+```
+
+Strong positive correlation between sales price and building square footage. No multicollinearity is present. However, there is strong evidence of non-linear relationships of sales price with building age and lot size.
+
+```{r}
+#| label: transformations
+
+# log continuous variables
+df$log_price <- log(df$sale_price)
+df$log_sf <- log(df$building_000sf)
+df$log_lot <- log(df$lotsize_acre)
+
+train_df <- train
+train_df$log_price <- log(train_df$sale_price)
+train_df$log_sf <- log(train_df$building_000sf)
+train_df$log_lot <- log(train_df$lotsize_acre)
+
+hist(train_df$log_price, breaks = 30)
+hist(train_df$log_sf, breaks = 30)
+hist(train_df$log_lot, breaks = 30)
+
+```
+
+After log-transforming, the continuous variables are normally distributed.
+
+```{r}
+q1 <- quantile(train_df$log_price, 0.25)
+q3 <- quantile(train_df$log_price, 0.75)
+iqr <- IQR(train_df$log_price)
+
+upper_bound <- q3 + 1.5*iqr
+lower_bound <- q1 - 1.5*iqr
+
+# Remove outliers (> 3 * IQR from median)
+# low_threshold <- median(train$log_price, na.rm = TRUE) - 3 * IQR(train$log_price, na.rm = TRUE)
+# high_threshold <- median(train$log_price, na.rm = TRUE) + 3 * IQR(train$log_price, na.rm = TRUE)
+
+# Extract values of extreme outliers
+outliers <- train_df$log_price[train_df$log_price < lower_bound | train_df$log_price > upper_bound]
+length(outliers)
+```
+
+```{r}
+# Visualize IQR
+plot(train_df$log_price)
+abline(h=upper_bound, col = "red")
+abline(h=lower_bound, col = "red")
+```
+
+```{r}
+boxplot(train_df$log_price)
+```
+
+
+```{r}
+# Check length before
+nrow(train_df)
+
+clean_train <- train_df %>%
+  filter(log_price > lower_bound,
+         log_price < upper_bound)
+
+# Check length after
+nrow(clean_train)
+```
+
+```{r}
+hist(clean_train$log_price, breaks = 30)
+
+describe(clean_train$sale_price)
+```
+
+[IQR for outliers](https://medium.com/@psrinivasan028/steps-to-detect-outliers-using-interquartile-range-iqr-with-r-1f9ed7895d96 "Medium Article")
+
+The IQR was used to identify outliers rather than standard deviation because sales price generally uses the median and the high skewness of the data requires a stricter condition. In total, 939 outliers were identified and removed, which is ~4% of the training set. This reduced the standard deviation by a large margin, indicating many large outliers were removed. Although this method will reduce the bias of those outliers on the model's test set prediction, outliers in the test set will not be taken account for at the same capacity. However, this should reduce the model's over and under predictions.
+
+### Spatial spread of sales price
+
+```{r}
+#| fig-width: 14
+#| fig-height: 10
+ggplot(clean_train) +
+  geom_sf(aes(color = log_price)) +
+  theme_void()
+```
+
+### Create new variables
+
+Before loading data, removed columns with text like addresses and descriptions to reduce file size
+
+```{r}
+#| label: Spatial Features
+
+crimes <- read_csv(file.path(root, "data", "clean", "crimes_filtered.csv"), show_col_types = FALSE) %>%
+  filter(!is.na(Longitude), !is.na(Latitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(3435)
+
+afd_housing <- read_csv(file.path(root, "data", "raw", "afd_rent_housingDev.csv"), show_col_types = FALSE) %>%
+  filter(!is.na(Longitude), !is.na(Latitude)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326) %>%
+  st_transform(3435)
+
+# highschools <- read_csv(file.path(root, "data", "raw", "highschools_23-24.csv"), show_col_types = FALSE) %>%
+#   filter(!is.na(School_Longitude), !is.na(School_Latitude)) %>%
+#   st_as_sf(coords = c("School_Longitude", "School_Latitude"), crs = 4326) %>%
+#   st_transform(3435)
+# schools$Overall_Rating = factor(schools$Overall_Rating, levels = c("Level 1+", "Level 1", "Level 2+", "Level 2", "Level 3"))
+
+parks <- read_csv(file.path(root, "data", "raw", "parks_rec.csv"), show_col_types = FALSE) %>%
+  filter(!is.na(the_geom)) %>% 
+  st_as_sf(wkt = "the_geom", crs = 4326) %>%
+  st_transform(3435)
+
+train_stops <- read_csv(file.path(root, "data", "raw", "train_stops.csv"), show_col_types = FALSE) %>%
+  filter(!is.na(lon), !is.na(lat)) %>% 
+  st_as_sf(coords = c("lon", "lat"), crs = 4326) %>%
+  st_transform(3435)
+
+bus_stops <- read_csv(file.path(root, "data", "raw", "bus_stops.csv"), show_col_types = FALSE) %>%
+  filter(!is.na(the_geom)) %>% 
+  st_as_sf(wkt = "the_geom", crs = 4326) %>%
+  st_transform(3435)
+
+bikes <- read_csv(file.path(root, "data", "raw", "bike_stations.csv"), show_col_types = FALSE) %>%
+  filter(!is.na(Location)) %>% 
+  st_as_sf(wkt = "Location", crs = 4326) %>%
+  st_transform(3435)
+
+ADU <- read_csv(file.path(root, "data", "raw", "ADU_areas.csv"), show_col_types = FALSE) %>%
+  filter(!is.na(the_geom)) %>% 
+  st_as_sf(wkt = "the_geom", crs = 4326) %>%
+  st_transform(3435)
+
+comm_area <- read_csv(file.path(root, "data", "raw", "comm_area.csv"), show_col_types = FALSE) %>%
+  filter(!is.na(the_geom), !is.na(COMMUNITY)) %>% 
+  st_as_sf(wkt = "the_geom", crs = 4326) %>%
+  st_transform(3435)
+```
+
+
+```{r}
+# Class A, B, C
+# A is built in last 2 decades
+# B is built in last 5 decades
+# C > 6 decades
+
+clean_train <- clean_train %>%
+  mutate(age_class = case_when(
+    building_age < 20 ~ "A",
+    building_age < 50 ~ "B",
+    TRUE              ~ "C"
+  ),
+  age_class = factor(age_class, levels = c("A", "B", "C"))
+)
+
+df <- df %>%
+  mutate(age_class = case_when(
+    building_age < 20 ~ "A",
+    building_age < 50 ~ "B",
+    TRUE              ~ "C"
+  ),
+  age_class = factor(age_class, levels = c("A", "B", "C"))
+)
+
+# Create new variable FAR --> if building sqft in comparison to other lots is smaller --> property has issues (zoning/environmental)
+# lots that have similar sizes, but lot A has higher building square footage
+
+clean_train <- clean_train %>%
+  mutate(FAR = building_000sf / (lotsize_acre * 43560))
+
+df <- df %>%
+  mutate(FAR = building_000sf / (lotsize_acre * 43560))
+```
+
+
+```{r}
+# Calculate nearest bike/train/bus stops
+train_pts <- st_point_on_surface(clean_train)
+
+nearest_train_idx <- st_nearest_feature(train_pts, train_stops)
+nearest_bus_idx <- st_nearest_feature(train_pts, bus_stops)
+nearest_bike_idx <- st_nearest_feature(train_pts, bikes)
+
+clean_train <- clean_train %>%
+  mutate(
+    dist_train_mi = as.numeric(st_distance(train_pts, train_stops[nearest_train_idx, ], by_element = TRUE)) / 5280,
+    dist_bus_mi = as.numeric(st_distance(train_pts, bus_stops[nearest_bus_idx, ], by_element = TRUE)) / 5280,
+    dist_bike_mi = as.numeric(st_distance(train_pts, bikes[nearest_bike_idx, ], by_element = TRUE)) / 5280
+  )
+
+df_pts <- st_point_on_surface(df)
+
+nearest_train_idx <- st_nearest_feature(df_pts, train_stops)
+nearest_bus_idx <- st_nearest_feature(df_pts, bus_stops)
+nearest_bike_idx <- st_nearest_feature(df_pts, bikes)
+
+df <- df %>%
+  mutate(
+    dist_train_mi = as.numeric(st_distance(df_pts, train_stops[nearest_train_idx, ], by_element = TRUE)) / 5280,
+    dist_bus_mi = as.numeric(st_distance(df_pts, bus_stops[nearest_bus_idx, ], by_element = TRUE)) / 5280,
+    dist_bike_mi = as.numeric(st_distance(df_pts, bikes[nearest_bike_idx, ], by_element = TRUE)) / 5280
+  )
+```
+
+
+```{r}
+# Closest school's ranking
+# Overall Rating levels: 1+, 1, 2+, 2, 3
+# nearest_school_idx <- st_nearest_feature(train_pts, schools)
+# 
+# clean_train <- clean_train %>%
+#   mutate(school_rating = schools$Overall_Rating[nearest_school_idx])
+```
+
+
+```{r}
+# Number of parks/rec in quarter-mile radius
+clean_train <- clean_train %>%
+  mutate(parks_radius = lengths(st_intersects(st_buffer(., dist = 1320), parks)))
+
+# Crimes in quarter-mile radius
+clean_train <- clean_train %>%
+  mutate(crime_radius = lengths(st_intersects(st_buffer(., dist = 1320), crimes)))
+
+# Mean number of affordable rentals in quarter-mile radius
+nn_afd <- st_nn(clean_train, afd_housing, k = 5, returnDist = FALSE, progress = FALSE)
+mean_afdHousing <- sapply(nn_afd, function(idx) {
+  mean(afd_housing$Units[idx], na.rm = TRUE)
+})
+clean_train <- clean_train %>%
+  mutate(
+    afdHousing_radius = lengths(st_intersects(st_buffer(., dist = 1320), afd_housing)),
+    mean_afdHousing = mean_afdHousing
+    )
+
+# Number of parks/rec in quarter-mile radius
+df <- df %>%
+  mutate(parks_radius = lengths(st_intersects(st_buffer(., dist = 1320), parks)))
+
+# Crimes in quarter-mile radius
+df <- df %>%
+  mutate(crime_radius = lengths(st_intersects(st_buffer(., dist = 1320), crimes)))
+
+# Mean number of affordable rentals in quarter-mile radius
+nn_afd <- st_nn(df, afd_housing, k = 5, returnDist = FALSE, progress = FALSE)
+mean_afdHousing <- sapply(nn_afd, function(idx) {
+  mean(afd_housing$Units[idx], na.rm = TRUE)
+})
+df <- df %>%
+  mutate(
+    afdHousing_radius = lengths(st_intersects(st_buffer(., dist = 1320), afd_housing)),
+    mean_afdHousing = mean_afdHousing
+    )
+```
+
+
+```{r}
+# Inside or outside ADU area
+clean_train <- clean_train %>%
+  mutate(in_ADU_area = lengths(st_intersects(., ADU)) > 0)
+
+df <- df %>%
+  mutate(in_ADU_area = lengths(st_intersects(., ADU)) > 0)
+```
+
+
+```{r}
+# Fixed effect community area
+clean_train <- clean_train %>%
+  st_join(comm_area %>% select(community = COMMUNITY), largest = TRUE)
+
+clean_train <- clean_train %>%
+  mutate(community = replace_na(community, "Unknown")) %>%
+  mutate(community = factor(community))
+
+df <- df %>%
+  st_join(comm_area %>% select(community = COMMUNITY), largest = TRUE)
+
+df <- df %>%
+  mutate(community = replace_na(community, "Unknown")) %>%
+  mutate(community = factor(community))
+
+clean_train %>% st_drop_geometry() %>% count(community, sort = TRUE)
+```
+
+
+### Check created variables
+
+```{r}
+plot(data = clean_train, log_price ~ FAR)
+plot(data = clean_train, log_price ~ dist_train_mi)
+plot(data = clean_train, log_price ~ dist_bus_mi)
+plot(data = clean_train, log_price ~ dist_bike_mi)
+plot(data = clean_train, log_price ~ parks_radius)
+plot(data = clean_train, log_price ~ crime_radius)
+plot(data = clean_train, log_price ~ mean_afdHousing)
+```
+
+
+```{r}
+table(clean_train$age_class)
+# table(clean_train$school_rating)
+table(clean_train$in_ADU_area)
+```
+
+**Answer:** What in your exploration shaped your modeling choices?
+
+*Your answer:*
+
+First, the dependent variable is extremely skewed. There are very few houses that sell for many times the price of a median house and very few that are sold at extremely low prices. Because these houses likely don't represent the standard single-family housing, these outliers should be removed for prediction. Furthermore, the continuous variables that were highly skewed were logged to better fulfill linear regression assumptions.
+
+Second, there is no multicollinearity in the predictors, but some of the categorical variables are redundant. Interaction effects should be tested out. There are also a lot of variables to add, which means a stepwise regression would be beneficial for variable selection.
+
+Lastly, house sales price are clustered depending on location. The Northeast end seems to have a higher sale prices. Adding a fixed effect variable will be useful for accounting for this.
+
+---
+
+## Part 2: Build the model
+
+```{r}
+#| label: part-2
+
+model_log <- tibble(
+  model   = character(),
+  added   = character(),
+  cv_rmse = numeric(),
+  moran_i = numeric(),
+  notes   = character()
+)
+```
+
+
+```{r}
+moran <- function(formula, df, response, k = 5) {
+  rmse <- cv_rmse(formula, df)
+  pred <- cv_pred(formula, df)
+  resid_cv <- df[[response]] - pred
+  
+  coords <- st_coordinates(df)
+  
+  w_knn <- nb2listw(knn2nb(knearneigh(st_coordinates(df), k = k)), style = "W")
+  
+  moran_res <- moran.test(resid_cv , w_knn)
+  moran_i <- moran_res$estimate[["Moran I statistic"]]
+  moran_p <- moran_res$p.value
+  
+  tibble(
+    moran_i = moran_i,
+    moran_p = moran_p
+  )
+}
+```
+
+
+```{r}
+f_base <- sale_price ~ building_000sf + building_age + lotsize_acre + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace
+
+model_log <- model_log %>%
+  add_row(model = "m1", added = "All given variables",
+          cv_rmse = cv_rmse(f_base, clean_train),
+          moran_i = moran(f_base, clean_train, "log_price")$moran_i,
+          notes = "Baseline model")
+```
+
+```{r}
+f1 <- sale_price ~ log_sf + building_age + lotsize_acre + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace
+
+model_log <- model_log %>%
+  add_row(model = "m2", added = "log(building_000sf)",
+          cv_rmse = cv_rmse(f1, clean_train),
+          moran_i = moran(f1, clean_train, "log_price")$moran_i,
+          notes = "log transformed building_000sf")
+```
+
+```{r}
+f2 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace
+
+model_log <- model_log %>%
+  add_row(model = "m3", added = "log(lotsize_acre)",
+          cv_rmse = cv_rmse(f2, clean_train),
+          moran_i = moran(f2, clean_train, "log_price")$moran_i,
+          notes = "log transformed lotsize_acre")
+```
+
+```{r}
+f3 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class
+
+model_log <- model_log %>%
+  add_row(model = "m4", added = "age class variable",
+          cv_rmse = cv_rmse(f3, clean_train),
+          moran_i = moran(f3, clean_train, "log_price")$moran_i,
+          notes = "age class A/B/C")
+```
+
+```{r}
+f4 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR
+
+model_log <- model_log %>%
+  add_row(model = "m5", added = "FAR",
+          cv_rmse = cv_rmse(f4, clean_train),
+          moran_i = moran(f4, clean_train, "log_price")$moran_i,
+          notes = "added floor to area ratio")
+```
+
+```{r}
+f5 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing
+
+model_log <- model_log %>%
+  add_row(model = "m6", added = "mean_afdHousing",
+          cv_rmse = cv_rmse(f5, clean_train),
+          moran_i = moran(f5, clean_train, "log_price")$moran_i,
+          notes = "Mean of 5 closes affordable rental units")
+```
+
+```{r}
+f6 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi
+
+model_log <- model_log %>%
+  add_row(model = "m7", added = "dist_train_mi",
+          cv_rmse = cv_rmse(f6, clean_train),
+          moran_i = moran(f6, clean_train, "log_price")$moran_i,
+          notes = "distance to closest train station")
+```
+
+```{r}
+f7 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi + dist_bus_mi
+
+model_log <- model_log %>%
+  add_row(model = "m8", added = "dist_bus_mi",
+          cv_rmse = cv_rmse(f7, clean_train),
+          moran_i = moran(f7, clean_train, "log_price")$moran_i,
+          notes = "distance to closest bus station")
+```
+
+```{r}
+f8 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi + dist_bus_mi + dist_bike_mi
+
+model_log <- model_log %>%
+  add_row(model = "m9", added = "dist_bike_mi",
+          cv_rmse = cv_rmse(f8, clean_train),
+          moran_i = moran(f8, clean_train, "log_price")$moran_i,
+          notes = "distance to closest bike rack")
+```
+
+```{r}
+f9 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi + dist_bus_mi + dist_bike_mi + parks_radius
+
+model_log <- model_log %>%
+  add_row(model = "m10", added = "parks_radius",
+          cv_rmse = cv_rmse(f9, clean_train),
+          moran_i = moran(f9, clean_train, "log_price")$moran_i,
+          notes = "number of parks in quarter mile raidus")
+```
+
+```{r}
+f10 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi + dist_bus_mi + dist_bike_mi + parks_radius + crime_radius
+
+model_log <- model_log %>%
+  add_row(model = "m11", added = "crime_radius",
+          cv_rmse = cv_rmse(f10, clean_train),
+          moran_i = moran(f10, clean_train, "log_price")$moran_i,
+          notes = "number of crimes committed in quarter mile raidus")
+```
+
+```{r}
+f11 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi + dist_bus_mi + dist_bike_mi + parks_radius + crime_radius + in_ADU_area
+
+model_log <- model_log %>%
+  add_row(model = "m12", added = "in_ADU_area",
+          cv_rmse = cv_rmse(f11, clean_train),
+          moran_i = moran(f11, clean_train, "log_price")$moran_i,
+          notes = "is the house in a access dwelling unit development area")
+```
+
+```{r}
+f12 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement + finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi + dist_bus_mi + dist_bike_mi + parks_radius + crime_radius + in_ADU_area + community
+
+model_log <- model_log %>%
+  add_row(model = "m13", added = "community",
+          cv_rmse = cv_rmse(f12, clean_train),
+          moran_i = moran(f12, clean_train, "log_price")$moran_i,
+          notes = "which community is the house in")
+```
+
+```{r}
+f13 <- sale_price ~ log_sf + building_age + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + central_air + one_story + full_basement * finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi + dist_bus_mi + dist_bike_mi + parks_radius + crime_radius + in_ADU_area + community
+
+model_log <- model_log %>%
+  add_row(model = "m14", added = "interaction between full_basement and finished_basement",
+          cv_rmse = cv_rmse(f13, clean_train),
+          moran_i = moran(f13, clean_train, "log_price")$moran_i,
+          notes = "interaction effect between full_basement and finished_basement")
+```
+
+```{r}
+f14 <- sale_price ~ log_sf * community + log_lot + num_bedrooms + num_full_baths + num_half_baths + num_fireplaces + garage_size + building_age * central_air + one_story + full_basement * finished_basement + brick_stone_ext + warmairfurnace + age_class + FAR + mean_afdHousing + dist_train_mi + dist_bus_mi + dist_bike_mi + parks_radius + crime_radius + in_ADU_area
+
+model_log <- model_log %>%
+  add_row(model = "m15", added = "interaction between log_sf and community",
+          cv_rmse = cv_rmse(f14, clean_train),
+          moran_i = moran(f14, clean_train, "log_price")$moran_i,
+          notes = "interaction effect between log_sf and community")
+```
+
+```{r}
+full_model <- lm(f14, data = clean_train)
+step_model <- step(full_model, direction = "backward", trace = FALSE)
+
+f_stepwise <- formula(step_model)
+model_log <- model_log %>%
+  add_row(model = "m16", added = "stepwise selection",
+          cv_rmse = cv_rmse(f_stepwise, clean_train),
+          moran_i = moran(f_stepwise, clean_train, "log_price")$moran_i,
+          notes = "predictors selected using backward stepwise (AIC)")
+```
+
+---
+
+## Part 3: Final model
+
+Show your final model, the model log, and baseline vs. final residual maps.
+
+```{r}
+#| label: part-3
+
+f_stepwise
+model_log
+```
+
+
+```{r}
+#| label: resid-map-baseline
+
+m1 <- lm(f_base, data = clean_train)
+clean_train <- clean_train %>% mutate(resid_m1 = residuals(m1))
+
+ggplot(clean_train) +
+  geom_sf(aes(color = resid_m1)) +
+  scale_color_gradient2(low = "#2166ac", mid = "grey95", high = "#b2182b", midpoint = 0) +
+  theme_void() +
+  labs(title = "Baseline model: where it's wrong",
+       subtitle = "Red = actual higher than predicted",
+       color = "Residual")
+```
+
+
+```{r}
+#| label: resid-map-final
+
+m_final <- lm(f_stepwise, data = clean_train)
+clean_train <- clean_train %>% mutate(resid_mfinal = residuals(m_final))
+
+ggplot(clean_train) +
+  geom_sf(aes(color = resid_mfinal)) +
+  scale_color_gradient2(low = "#2166ac", mid = "grey95", high = "#b2182b", midpoint = 0) +
+  theme_void() +
+  labs(title = "Final model: where it's wrong",
+       subtitle = "Red = actual higher than predicted",
+       color = "Residual")
+```
+
+```{r}
+#| label: check-linear-assumptions
+
+plot(m_final)
+```
+
+**Answer:** What helped most, and what disappointed you? Use your log.
+
+*Your answer:*
+
+Most variables added marginally improved or reduced CV_RMSE and reduced Moran's I, but crime_radius and in_ADU_area stood out by decreasing Moran's I. The most effective predictor was the community each house was in. The chloropleth map of house prices above showed some clustering, so a spatial fixed effect variable took into account that bias. Interaction terms also helped explain the differences between categories, which lowered CV_RMSE. The distance to public transit was not as effective as predictors as we thought. The number of affordable housing options in the vicinity was also disappointing, as it is a bit of an urban myth that they reduce house prices. 
+
+---
+
+## Part 4: Where it fails, and who pays
+
+**4A.** Where does your final model fail worst? Is it guessing too high or too low there, and why do you think so?
+
+**4B.** Assessors judge their work with the **ratio** of predicted value to sale price. A ratio above 1 means the home is over-valued and its owner over-taxed. Does your model's ratio differ by neighborhood income? Connect your answer to your Part 1 cleaning rules and to "The Tax Divide."
+
+```{r}
+#| label: part-4
+
+clean_train <- clean_train %>%
+  mutate(
+    pred_value = predict(m_final, newdata = clean_train),
+    ratio = pred_value / sale_price
+  )
+
+summary(clean_train$ratio)
+hist(clean_train$ratio, breaks = 15)
+```
+
+*Your answers:*
+
+Overall, the final model performs better in all areas of Chicago, with the biggest improvements in the North and South end where residuals were much lower than before. The Northeast area improved the least, with the model still over predicting there. Over prediction was more extreme, but less widespread, while under prediction became less extreme and prevalent. Because the community had such a large effect on CV RMSE and Moran's I, there may be more neighborhoods classified in the North than the South, resulting in clustering of house sales. Assuming that is downtown Chicago, there higher granularity may be required to examine those neighborhoods on the block scale. Areas in the suburbs are likely more stable and prices are less erratic or unpredictable.
+
+The predicted to actual value ratio of the model was on the higher side, as the mean was above 1. The largest ratio was 15, which is extremely large. This indicates a massive over prediction on one of the houses, likely in the downtown area.
+
+---
+
+## Part 5: Predict the test houses (provided)
+
+Refit your final recipe on all training sales, then predict every test house. Set `f_final` to your final formula.
+
+```{r}
+#| label: predict-test
+
+f_final <- f_stepwise
+
+m_final <- lm(f_final, data = st_drop_geometry(clean_train))
+
+test <- df %>% filter(split == "test")
+
+colSums(is.na(test))
+test <- test %>%
+  replace_na(list(
+    sale_price = 0,
+    num_half_baths = 0,
+    num_fireplaces = 0,
+    garage_size    = 0,
+    warmairfurnace = 0
+  ))
+colSums(is.na(test))
+
+check_na(f_final, st_drop_geometry(test))
+```
+
+```{r}
+coefficients(m_final)
+```
+
+```{r}
+preds <- tibble(id = test$id, pred = predict(m_final, st_drop_geometry(test)))
+
+stopifnot(nrow(preds) == nrow(test), all(is.finite(preds$pred)))
+write_csv(preds, "team_injera_predictions.csv")
+```
+
+```{r}
+min(model_log$cv_rmse)
+moran(f_stepwise, clean_train, "log_price")$moran_p
+```
+
+**Final CV RMSE:** 135748.3
+
+---
+
+## Part 6: Reflection (about 300 words, as a team)
+
+1. **Read one coefficient twice:** once as β̂, once for what it does to ŷ.
+2. **Would you hand this model to the Assessor?** What would you warn them about?
+
+*Your answer:*
+
+The coefficient of age class C is -141166.45, which means that if a house is older than 60 years old, its sale price will be 141,166 dollars lower than that of a house built 20 or less years ago while holding other variables constant. The coefficient of dist_bus_mi is 40236.06, which means a 1 mile increase from a bus station will result in the house price going up by 40,000 dollars. In simple terms, the further away from a bus stop a house is, the more it will cost according to this model. Interaction terms tells us the effect of one variable on the coefficient of another. This means that when comparing the coefficient of log(house square foot) to predict sale price against the baseline community, the coefficient of log_sf in Archer Heights is 288,087 lower.
+
+Before handing this model to an Assessor, the test CV RMSE will have to be calculated first to ensure that the model is generalizable and not massively overfitting on the train set. Due to the variable of interest being extremely skewed, the next study should log-transform sales price to create a normal distribution for linear regression. Another issue is whether the model meets the linear regression assumptions. Relationships in the real world area seldom linear and would require more complex non-linear models, which should be explored. Using more complex machine learning models should also predict sale prices more accurately. As a starting model, this would be a good place to start due to the inexpensive methods used, alongside the interpretability. Using black-box models will yield more accurate predictions, but the model cannot be understood as well, which is a trade-off to consider. If the goal is to show this model to a wide audience, then using a model like this would be recommended.
+
+### Who did what
+
+| Name | Main contribution |
+|---|---|
+| Thomas | Find variables of interest to add |
+| Tatar | Clean data, perform EDA, variable transformations |
+| Together | Decisions on modeling |
+
+
+### AI Team Statement
+What was your team's AI policy and how was AI used in this assignment? 
+
+Use AI for debugging, no generating code we don't understand. Use existing class code for data cleaning and creation of spatial variables. Ideate different ways to use variables for modeling, we look at these suggestions and choose ourselves.
